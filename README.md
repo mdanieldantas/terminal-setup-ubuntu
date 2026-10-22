@@ -74,6 +74,7 @@ docker compose -f docker/compose.yaml run --rm terminal
 
 ## 4. Documentação completa (`docs/`)
 
+- **Manual completo do usuário (passo a passo operacional):** [`docs/manual-do-usuario.md`](docs/manual-do-usuario.md)
 - **Arquitetura e fluxo interno:** [`docs/arquitetura.md`](docs/arquitetura.md)
 - **Guia de instalação (interativa, não interativa, 2 etapas, Git opcional):** [`docs/instalacao.md`](docs/instalacao.md)
 - **Perfis e seleção de componentes:** [`docs/perfis.md`](docs/perfis.md)
