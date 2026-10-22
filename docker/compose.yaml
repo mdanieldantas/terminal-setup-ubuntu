@@ -1,0 +1,34 @@
+# ==============================================================================
+# docker/compose.yaml — Definicao Compose para o ambiente terminal-setup
+#
+# Regras aplicadas (Secoes 12 e 17 do guia):
+#   - Formato Compose moderno (sem campo top-level 'version' legado).
+#   - Nome do servico: 'terminal' (para 'docker compose -f docker/compose.yaml run --rm terminal').
+#   - Contexto de build '..' (raiz do repositorio) e dockerfile 'docker/Dockerfile'.
+#   - Uso interativo (stdin_open: true, tty: true) como usuario nao-root 'dev'.
+#   - Sem privileged, sem network_mode: host, sem portas expostas, sem socket
+#     Docker e sem volumes do host montados por padrao.
+# ==============================================================================
+
+services:
+  terminal:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        PROFILE: ${PROFILE:-developer}
+        USERNAME: dev
+    image: terminal-setup:dev
+    user: dev
+    working_dir: /home/dev
+    stdin_open: true
+    tty: true
+    command: ["/usr/bin/zsh", "-l"]
+    # Volumes do host sao estritamente opt-in (Secao 12 do guia).
+    # Nunca monte /home, /root ou o HOME inteiro do host automaticamente.
+    # Exemplo opcional para montar apenas uma pasta de trabalho especifica:
+    # volumes:
+    #   - type: bind
+    #     source: ./meu-projeto-isolado
+    #     target: /home/dev/workspace
+

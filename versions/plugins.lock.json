@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "project": "terminal-setup",
+  "updated_at": "2026-10-22",
+  "plugins": {
+    "zsh-vi-mode": {
+      "name": "zsh-vi-mode",
+      "owner": "jeffreytse",
+      "repository": "https://github.com/jeffreytse/zsh-vi-mode.git",
+      "homepage": "https://github.com/jeffreytse/zsh-vi-mode",
+      "license": "MIT",
+      "tag": "v0.12.0",
+      "tag_ref_type": "commit",
+      "commit": "80f78d9a3cc06843c776f60e4535b20bb857b1d4",
+      "entry_file": "zsh-vi-mode.plugin.zsh",
+      "load_order": 1,
+      "optional_by_default": true,
+      "verified_source": "github_git_ref_tags_and_commits_api",
+      "verified_date": "2026-10-22"
+    },
+    "zsh-autosuggestions": {
+      "name": "zsh-autosuggestions",
+      "owner": "zsh-users",
+      "repository": "https://github.com/zsh-users/zsh-autosuggestions.git",
+      "homepage": "https://github.com/zsh-users/zsh-autosuggestions",
+      "license": "MIT",
+      "tag": "v0.7.1",
+      "tag_ref_type": "commit",
+      "commit": "e52ee8ca55bcc56a17c828767a3f98f22a68d4eb",
+      "entry_file": "zsh-autosuggestions.zsh",
+      "load_order": 2,
+      "optional_by_default": false,
+      "verified_source": "github_git_ref_tags_and_commits_api",
+      "verified_date": "2026-10-22"
+    },
+    "zsh-syntax-highlighting": {
+      "name": "zsh-syntax-highlighting",
+      "owner": "zsh-users",
+      "repository": "https://github.com/zsh-users/zsh-syntax-highlighting.git",
+      "homepage": "https://github.com/zsh-users/zsh-syntax-highlighting",
+      "license": "BSD-3-Clause",
+      "tag": "0.8.0",
+      "tag_ref_type": "tag",
+      "annotated_tag_object": "b1379f1ee96b1fe25701c9418c75f81eaabdab56",
+      "commit": "db085e4661f6aafd24e5acb5b2e17e4dd5dddf3e",
+      "entry_file": "zsh-syntax-highlighting.zsh",
+      "load_order": 3,
+      "optional_by_default": false,
+      "verified_source": "github_git_ref_tags_and_commits_api",
+      "verified_date": "2026-10-22"
+    },
+    "zsh-history-substring-search": {
+      "name": "zsh-history-substring-search",
+      "owner": "zsh-users",
+      "repository": "https://github.com/zsh-users/zsh-history-substring-search.git",
+      "homepage": "https://github.com/zsh-users/zsh-history-substring-search",
+      "license": "BSD-3-Clause",
+      "tag": "v1.1.0",
+      "tag_ref_type": "commit",
+      "commit": "400e58a87f72ecec14f783fbd29bc6be4ff1641c",
+      "entry_file": "zsh-history-substring-search.zsh",
+      "load_order": 4,
+      "optional_by_default": false,
+      "verified_source": "github_git_ref_tags_and_commits_api",
+      "verified_date": "2026-10-22"
+    }
+  }
+}

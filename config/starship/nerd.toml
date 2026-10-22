@@ -1,0 +1,47 @@
+# ==============================================================================
+# config/starship/nerd.toml — Configuracao Starship com simbolos Nerd Font
+# Ativada somente quando o usuario informa --icons nerd (ou ICONS=nerd).
+# Nota: A Nerd Font deve estar instalada no terminal cliente (ex.: Konsole no host).
+# ==============================================================================
+
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = false
+command_timeout = 800
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold yellow)"
+
+[directory]
+truncation_length = 4
+truncate_to_repo = true
+read_only = " 󰌾"
+
+[git_branch]
+symbol = " "
+format = "[$symbol$branch(:$remote_branch)]($style) "
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+
+[cmd_duration]
+min_time = 2000
+format = "󱎫 [$duration]($style) "
+
+[hostname]
+ssh_only = true
+ssh_symbol = "󰣀 "
+format = "[$ssh_symbol$hostname]($style) in "
+
+[username]
+show_always = false
+format = "[$user]($style)@"
+
+[docker_context]
+disabled = true
+
+[package]
+disabled = true
+

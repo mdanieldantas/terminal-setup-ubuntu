@@ -1,0 +1,94 @@
+# ==============================================================================
+# ~/.zshrc (ou $ZDOTDIR/.zshrc) — Gerenciado por terminal-setup
+# Nota: Carregado apenas em shells interativos. Se o shell nao for interativo,
+# retorna imediatamente sem imprimir nada em stdout.
+# ==============================================================================
+
+[[ -o interactive ]] || return 0
+
+# Diretorios XDG e de modulos do terminal-setup
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-${HOME}/.local/state}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+typeset -g TS_ZSH_CONFIG_DIR="${XDG_CONFIG_HOME}/terminal-setup/zsh"
+typeset -g TS_ZSH_STATE_DIR="${XDG_STATE_HOME}/terminal-setup/zsh"
+
+# Garantir ~/.local/bin na frente do PATH
+if [[ -d "${HOME}/.local/bin" ]]; then
+  case ":${PATH}:" in
+    *":${HOME}/.local/bin:"*) ;;
+    *) export PATH="${HOME}/.local/bin:${PATH}" ;;
+  esac
+fi
+
+# Configuracao de historico com permissoes privadas (Secao 10 do guia)
+# Nota: HIST_IGNORE_SPACE evita gravar linhas iniciadas por espaco no arquivo
+# de historico, mas nao protege segredos contra argumentos de processo (ps)
+# ou logs externos.
+() {
+  local old_umask
+  old_umask="$(umask)"
+  umask 077
+  if [[ ! -d "${TS_ZSH_STATE_DIR}" ]]; then
+    mkdir -p "${TS_ZSH_STATE_DIR}" 2>/dev/null || true
+  fi
+  export HISTFILE="${HISTFILE:-${TS_ZSH_STATE_DIR}/history}"
+  if [[ ! -e "${HISTFILE}" ]] && [[ -d "${TS_ZSH_STATE_DIR}" ]]; then
+    : > "${HISTFILE}" 2>/dev/null || true
+  fi
+  umask "${old_umask}"
+}
+HISTSIZE=10000
+SAVEHIST=10000
+
+setopt APPEND_HISTORY
+setopt INC_APPEND_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_SPACE
+setopt HIST_REDUCE_BLANKS
+setopt INTERACTIVE_COMMENTS
+setopt NO_BEEP
+
+# Sistema de completacao nativo do Zsh (cache em XDG_STATE_HOME)
+autoload -Uz compinit
+if [[ -d "${TS_ZSH_STATE_DIR}" ]]; then
+  compinit -d "${TS_ZSH_STATE_DIR}/zcompdump" -u 2>/dev/null || compinit -u 2>/dev/null || true
+else
+  compinit -u 2>/dev/null || true
+fi
+
+# Carregar opcoes visuais geradas na instalacao (TS_ICONS_MODE, TS_VI_MODE_ENABLED)
+if [[ -r "${TS_ZSH_CONFIG_DIR}/options.zsh" ]]; then
+  source "${TS_ZSH_CONFIG_DIR}/options.zsh"
+fi
+
+# Carregar modulos gerenciados pelo terminal-setup em ordem deterministica
+# (plugins.zsh e carregado apos bindings/fzf/aliases para respeitar a ordem
+# exigida por zsh-syntax-highlighting e zsh-history-substring-search).
+typeset -ga _ts_zsh_modules=(
+  "aliases.zsh"
+  "git.zsh"
+  "containers.zsh"
+  "database.zsh"
+  "fzf.zsh"
+  "plugins.zsh"
+  "bindings.zsh"
+  "prompt.zsh"
+)
+
+for _ts_mod in "${_ts_zsh_modules[@]}"; do
+  if [[ -r "${TS_ZSH_CONFIG_DIR}/${_ts_mod}" ]]; then
+    source "${TS_ZSH_CONFIG_DIR}/${_ts_mod}"
+  fi
+done
+unset _ts_mod _ts_zsh_modules
+
+# Integracao opcional com zoxide (quando instalado, sem substituir 'cd')
+if (( $+commands[zoxide] )); then
+  eval "$(zoxide init zsh)"
+fi
+
+# Arquivo local opcional do proprio usuario (nunca sobrescrito pelo terminal-setup)
+if [[ -r "${XDG_CONFIG_HOME}/terminal-setup/local.zsh" ]]; then
+  source "${XDG_CONFIG_HOME}/terminal-setup/local.zsh"
+fi

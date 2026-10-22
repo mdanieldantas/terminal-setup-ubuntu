@@ -11,7 +11,7 @@ fi
 readonly TS_COMMON_LOADED=1
 
 readonly TS_PROJECT_NAME="terminal-setup"
-readonly TS_PROJECT_VERSION="0.1.0-phase1"
+readonly TS_PROJECT_VERSION="0.3.0-phase3"
 readonly TS_SUPPORTED_DISTRO_ID="ubuntu"
 readonly TS_SUPPORTED_DISTRO_VERSION="24.04"
 readonly TS_SUPPORTED_ARCH="amd64"

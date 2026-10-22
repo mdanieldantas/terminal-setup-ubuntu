@@ -1,0 +1,23 @@
+# ==============================================================================
+# ~/.zshenv (ou $ZDOTDIR/.zshenv) — Gerenciado por terminal-setup
+# Nota: Este arquivo e lido em todas as invocacoes do Zsh. Nao produza saida
+# em stdout/stderr aqui para nao quebrar comandos nao interativos (scp/rsync).
+# ==============================================================================
+
+# Garantir ~/.local/bin e ~/.local/share/terminal-setup/bin no PATH sem duplicar
+case ":${PATH:-}:" in
+  *":${HOME}/.local/bin:"*) ;;
+  *)
+    if [[ -n "${PATH:-}" ]]; then
+      export PATH="${HOME}/.local/bin:${PATH}"
+    else
+      export PATH="${HOME}/.local/bin"
+    fi
+    ;;
+esac
+
+# Definir diretorios XDG padrao caso nao estejam definidos no ambiente
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-${HOME}/.local/state}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+

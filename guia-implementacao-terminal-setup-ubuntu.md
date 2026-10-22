@@ -142,6 +142,11 @@ terminal-setup/
 │   │   ├── git.zsh
 │   │   ├── plugins.zsh
 │   │   └── prompt.zsh
+│   │   # Nota: na instalacao em ${XDG_CONFIG_HOME}/terminal-setup/zsh/,
+│   │   # tambem e gerado de forma deterministica o arquivo options.zsh
+│   │   # (contendo TS_ICONS_MODE e TS_VI_MODE_ENABLED), registrado no
+│   │   # manifesto e sujeito as mesmas regras de conflito, backup,
+│   │   # idempotencia, validacao 'zsh -n' e restauracao.
 │   ├── starship/
 │   │   ├── plain.toml
 │   │   └── nerd.toml

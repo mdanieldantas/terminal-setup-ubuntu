@@ -1,0 +1,48 @@
+# ==============================================================================
+# .dockerignore — Controle do contexto de build Docker (Secoes 12 e 15 do guia)
+# Contexto de build esperado: raiz do repositorio
+# ==============================================================================
+
+# Metadados de controle de versao e CI
+.git
+.git/
+.gitignore
+.github/
+
+# Configuracao local do usuario na raiz (nao deve vazar para a imagem)
+terminal.conf
+*.local.conf
+
+# Preservar explicitamente os templates, perfis e exemplos versionados
+!examples/terminal.conf.example
+!profiles/*.conf
+!config/tmux/tmux.conf
+
+# Logs, backups, manifestos e diretorios temporarios locais
+*.log
+*.bak
+*.tmp
+*.swp
+*~
+backups/
+manifests/
+logs/
+tmp/
+.tmp/
+
+# Segredos, variaveis de ambiente locais e chaves privadas (Secao 14 e 15)
+.env
+.env.*
+*.pem
+*.key
+*.secret
+*.crt
+*.p12
+*.pfx
+*id_rsa*
+*id_ed25519*
+*id_ecdsa*
+.netrc
+.npmrc
+.pypirc
+

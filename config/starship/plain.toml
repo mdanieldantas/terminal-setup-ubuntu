@@ -1,0 +1,57 @@
+# ==============================================================================
+# config/starship/plain.toml — Configuracao Starship em modo texto puro (padrao)
+# Nao exige Nerd Font no terminal cliente nem no servidor SSH (Secao 10 do guia).
+# ==============================================================================
+
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = false
+command_timeout = 800
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[x](bold red)"
+vimcmd_symbol = "[<](bold yellow)"
+
+[directory]
+truncation_length = 4
+truncate_to_repo = true
+read_only = " [RO]"
+
+[git_branch]
+symbol = "git:"
+format = "[$symbol$branch(:$remote_branch)]($style) "
+
+[git_status]
+format = '([\[$all_status$ahead_behind\]]($style) )'
+conflicted = "="
+ahead = "^"
+behind = "v"
+diverged = "<>"
+up_to_date = ""
+untracked = "?"
+stashed = "$"
+modified = "!"
+staged = "+"
+renamed = "r"
+deleted = "x"
+
+[cmd_duration]
+min_time = 2000
+format = "took [$duration]($style) "
+
+[hostname]
+ssh_only = true
+ssh_symbol = "ssh:"
+format = "[$ssh_symbol$hostname]($style) in "
+
+[username]
+show_always = false
+format = "[$user]($style)@"
+
+[docker_context]
+disabled = true
+
+[package]
+disabled = true
+

@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "project": "terminal-setup",
+  "updated_at": "2026-10-22",
+  "target_distro": "ubuntu-24.04",
+  "tools": {
+    "starship": {
+      "name": "starship",
+      "command": "starship",
+      "version": "1.27.0",
+      "release_tag": "v1.27.0",
+      "release_commit": "f8e4e2155542cc84f49b342122d371f74e0ad253",
+      "published_at": "2026-10-17T09:17:43Z",
+      "license": "ISC",
+      "homepage": "https://starship.rs/",
+      "repository": "https://github.com/starship/starship",
+      "version_check_args": [
+        "--version"
+      ],
+      "artifacts": {
+        "amd64": {
+          "arch": "amd64",
+          "uname_m": "x86_64",
+          "filename": "starship-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/starship/starship/releases/download/v1.27.0/starship-x86_64-unknown-linux-musl.tar.gz",
+          "checksum_url": "https://github.com/starship/starship/releases/download/v1.27.0/starship-x86_64-unknown-linux-musl.tar.gz.sha256",
+          "sha256": "10c8eb4cb3b761d9bf59ea828444c2dab36c900b7d69a69e08814b286969df89",
+          "size_bytes": 5215016,
+          "archive_format": "tar.gz",
+          "binary_name": "starship",
+          "archive_entries": [
+            "starship"
+          ],
+          "checksum_origin": "upstream_sha256_file_and_github_release_api_digest",
+          "verification_status": "sha256_verified_and_tar_paths_listed_pending_extraction_and_execution",
+          "verified_date": "2026-10-22"
+        }
+      }
+    },
+    "superfile": {
+      "name": "superfile",
+      "command": "spf",
+      "version": "1.6.0",
+      "release_tag": "v1.6.0",
+      "release_commit": "865dba26c1d8d35b95bd7b7501ebdeac66ce2618",
+      "published_at": "2026-06-07T17:54:13Z",
+      "license": "MIT",
+      "homepage": "https://superfile.dev/",
+      "repository": "https://github.com/yorukot/superfile",
+      "version_check_args": [
+        "--version"
+      ],
+      "artifacts": {
+        "amd64": {
+          "arch": "amd64",
+          "uname_m": "x86_64",
+          "filename": "superfile-linux-v1.6.0-amd64.tar.gz",
+          "url": "https://github.com/yorukot/superfile/releases/download/v1.6.0/superfile-linux-v1.6.0-amd64.tar.gz",
+          "checksum_url": "https://github.com/yorukot/superfile/releases/download/v1.6.0/superfile-v1.6.0-checksums.txt",
+          "sha256": "d45b0e95072629a6aa7983a84eedca9cd7a98861e67ef91be1415496e3dda309",
+          "size_bytes": 13490110,
+          "archive_format": "tar.gz",
+          "binary_name": "spf",
+          "archive_entries": [
+            "./dist/superfile-linux-v1.6.0-amd64/",
+            "./dist/superfile-linux-v1.6.0-amd64/spf"
+          ],
+          "checksum_origin": "upstream_checksums_txt_and_github_release_api_digest",
+          "verification_status": "sha256_verified_and_tar_paths_listed_pending_extraction_and_execution",
+          "verified_date": "2026-10-22"
+        }
+      }
+    }
+  }
+}
