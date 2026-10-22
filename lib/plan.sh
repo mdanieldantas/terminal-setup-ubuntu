@@ -153,4 +153,3 @@ ts_print_execution_plan() {
     ts_ok "Modo --dry-run concluido: nenhum arquivo, diretorio, log, backup ou chamada de rede/sudo foi executado."
   fi
 }
-

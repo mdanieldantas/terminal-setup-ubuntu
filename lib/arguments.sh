@@ -192,7 +192,7 @@ ts_validate_enum() {
 
 # Exibe texto de ajuda sem alterar o sistema
 ts_print_help() {
-  cat << 'EOF'
+  cat <<'EOF'
 Uso:
   bash ./install-terminal.sh [opcoes]
 
@@ -272,6 +272,7 @@ ts_require_arg_value() {
 }
 
 # Faz o parsing completo da linha de comando, eventual --config e perfil selecionado
+# shellcheck disable=SC2034 # TS_ACTION e TS_OPT_* sao variaveis globais consumidas por install-terminal.sh e lib/plan.sh
 ts_parse_arguments() {
   local repo_root="$1"
   shift
@@ -295,7 +296,6 @@ ts_parse_arguments() {
   local cli_exclude=""
   local cli_only=""
   local cli_icons=""
-  local cli_vi_mode=""
   local cli_on_conflict=""
 
   local cli_has_profile="false"
@@ -411,7 +411,6 @@ ts_parse_arguments() {
         shift
         ;;
       --vi-mode)
-        cli_vi_mode="true"
         cli_has_vi_mode="true"
         shift
         ;;
@@ -767,7 +766,7 @@ ts_resolve_components() {
     if ! parsed_csv="$(ts_split_csv_strict "${TS_OPT_INCLUDE_RAW}")"; then
       ts_die_usage "Lista invalida em --include / INCLUDE: '${TS_OPT_INCLUDE_RAW}'."
     fi
-    mapfile -t include_list <<< "${parsed_csv}"
+    mapfile -t include_list <<<"${parsed_csv}"
     ts_validate_component_list "--include / INCLUDE" "${include_list[@]}"
   fi
 
@@ -775,7 +774,7 @@ ts_resolve_components() {
     if ! parsed_csv="$(ts_split_csv_strict "${TS_OPT_EXCLUDE_RAW}")"; then
       ts_die_usage "Lista invalida em --exclude / EXCLUDE: '${TS_OPT_EXCLUDE_RAW}'."
     fi
-    mapfile -t exclude_list <<< "${parsed_csv}"
+    mapfile -t exclude_list <<<"${parsed_csv}"
     ts_validate_component_list "--exclude / EXCLUDE" "${exclude_list[@]}"
   fi
 
@@ -783,7 +782,7 @@ ts_resolve_components() {
     if ! parsed_csv="$(ts_split_csv_strict "${TS_OPT_ONLY_RAW}")"; then
       ts_die_usage "Lista invalida em --only: '${TS_OPT_ONLY_RAW}'."
     fi
-    mapfile -t only_list <<< "${parsed_csv}"
+    mapfile -t only_list <<<"${parsed_csv}"
     ts_validate_component_list "--only" "${only_list[@]}"
   fi
 
@@ -846,14 +845,14 @@ ts_resolve_components() {
     if ! parsed_csv="$(ts_split_csv_strict "${TS_PROFILE_VALUES[REQUIRED_COMPONENTS]:-}")"; then
       ts_die "${TS_EXIT_ERR}" "Lista REQUIRED_COMPONENTS invalida no perfil '${TS_OPT_PROFILE}'."
     fi
-    mapfile -t profile_required_list <<< "${parsed_csv}"
+    mapfile -t profile_required_list <<<"${parsed_csv}"
     ts_validate_component_list "Perfil ${TS_OPT_PROFILE} (REQUIRED_COMPONENTS)" "${profile_required_list[@]}"
 
     if [[ -n "${TS_PROFILE_VALUES[OPTIONAL_COMPONENTS]:-}" ]]; then
       if ! parsed_csv="$(ts_split_csv_strict "${TS_PROFILE_VALUES[OPTIONAL_COMPONENTS]}")"; then
         ts_die "${TS_EXIT_ERR}" "Lista OPTIONAL_COMPONENTS invalida no perfil '${TS_OPT_PROFILE}'."
       fi
-      mapfile -t profile_optional_list <<< "${parsed_csv}"
+      mapfile -t profile_optional_list <<<"${parsed_csv}"
       ts_validate_component_list "Perfil ${TS_OPT_PROFILE} (OPTIONAL_COMPONENTS)" "${profile_optional_list[@]}"
     fi
 
@@ -952,4 +951,3 @@ ts_resolve_components() {
     fi
   done
 }
-

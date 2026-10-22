@@ -48,7 +48,11 @@ ts_ensure_local_bin_in_path() {
 ts_install_single_external_tool() {
   local repo_root="$1"
   local tool_name="$2"
-  local lock_file="${TS_TOOLS_LOCK_FILE:-${repo_root}/versions/tools.lock.json}"
+  local lock_file="${repo_root}/versions/tools.lock.json"
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" == "1" ]] \
+    && ts_is_effective_tmp_path "${TS_TEST_TOOLS_LOCK_FILE:-}"; then
+    lock_file="${TS_TEST_TOOLS_LOCK_FILE}"
+  fi
 
   ts_validate_tools_lock_file "${lock_file}"
 

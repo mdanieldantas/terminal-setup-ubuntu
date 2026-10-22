@@ -13,6 +13,7 @@
 # Impedir execucao via "source"
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   printf '[ERRO] Este script nao deve ser carregado com "source". Execute: bash ./install-terminal.sh [opcoes]\n' >&2
+  # shellcheck disable=SC2317 # fallback caso return falhe fora de contexto source
   return 2 2>/dev/null || exit 2
 fi
 
@@ -32,7 +33,8 @@ ts_resolve_repo_root() {
   cd -P "$(dirname "${source_path}")" >/dev/null 2>&1 && pwd
 }
 
-readonly TS_REPO_ROOT="$(ts_resolve_repo_root)"
+TS_REPO_ROOT="$(ts_resolve_repo_root)"
+readonly TS_REPO_ROOT
 
 # Carregar bibliotecas confiaveis do proprio repositorio
 # shellcheck source=lib/common.sh
@@ -151,9 +153,12 @@ main() {
   ts_manifest_init
 
   # 9. Instalar ferramentas externas do usuario (Starship / Superfile) em ~/.local/bin
-  # (Apenas se selecionadas; quando --skip-system-packages e usado apenas para dotfiles
-  # ou quando TS_SKIP_EXTERNAL_DOWNLOADS=true em testes de config pura, respeita a selecao)
-  if [[ "${TS_SKIP_EXTERNAL_DOWNLOADS:-false}" != "true" ]]; then
+  # (Apenas se selecionadas; quando testes unitarios offline da Fase 2 definem
+  # TS_TEST_SANDBOX_MODE=1 e TS_TEST_SKIP_EXTERNAL_DOWNLOADS=true sobre HOME efetivo
+  # em /tmp, omite a etapa de downloads externos para testar apenas a escrita de configs)
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" != "1" ]] \
+    || [[ "${TS_TEST_SKIP_EXTERNAL_DOWNLOADS:-false}" != "true" ]] \
+    || ! ts_is_effective_tmp_path "${HOME}"; then
     ts_install_selected_external_tools "${TS_REPO_ROOT}"
     ts_install_selected_zsh_plugins "${TS_REPO_ROOT}"
   fi

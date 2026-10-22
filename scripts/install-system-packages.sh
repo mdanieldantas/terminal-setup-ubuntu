@@ -14,6 +14,7 @@
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   printf '[ERRO] Este script nao deve ser carregado com "source". Execute como root: bash ./scripts/install-system-packages.sh [opcoes]\n' >&2
+  # shellcheck disable=SC2317 # fallback caso return falhe fora de contexto source
   return 2 2>/dev/null || exit 2
 fi
 
@@ -32,7 +33,8 @@ ts_resolve_repo_root() {
   cd -P "$(dirname "${source_path}")/.." >/dev/null 2>&1 && pwd
 }
 
-readonly TS_REPO_ROOT="$(ts_resolve_repo_root)"
+TS_REPO_ROOT="$(ts_resolve_repo_root)"
+readonly TS_REPO_ROOT
 
 # shellcheck source=lib/common.sh
 source "${TS_REPO_ROOT}/lib/common.sh"
@@ -66,7 +68,7 @@ HELPER_PACKAGES_RAW=""
 HELPER_DRY_RUN="false"
 
 helper_print_help() {
-  cat << 'EOF'
+  cat <<'EOF'
 Uso:
   sudo bash ./scripts/install-system-packages.sh [opcoes]
 
@@ -176,7 +178,7 @@ main() {
     ts_load_profile_file "${HELPER_PROFILE}" "${TS_REPO_ROOT}"
     parsed_csv="$(ts_split_csv_strict "${TS_PROFILE_VALUES[REQUIRED_COMPONENTS]}")"
     local -a prof_comps=()
-    mapfile -t prof_comps <<< "${parsed_csv}"
+    mapfile -t prof_comps <<<"${parsed_csv}"
     for comp in "${prof_comps[@]}"; do
       apt_pkg="$(ts_component_apt_package "${comp}")"
       if [[ -n "${apt_pkg}" ]]; then
@@ -187,7 +189,7 @@ main() {
     if ! parsed_csv="$(ts_split_csv_strict "${HELPER_PACKAGES_RAW}")"; then
       ts_die_usage "Lista de pacotes malformada em --packages: '${HELPER_PACKAGES_RAW}'."
     fi
-    mapfile -t target_packages <<< "${parsed_csv}"
+    mapfile -t target_packages <<<"${parsed_csv}"
   fi
 
   # Validar cada pacote estritamente contra a allowlist fechada
@@ -198,7 +200,11 @@ main() {
   done
 
   # Exigir UID 0 (root) para qualquer operacao (Secao 4 e Secao 18 do guia)
-  local euid="${TS_TEST_EUID:-${EUID:-$(id -u)}}"
+  local real_euid="${EUID:-$(/usr/bin/id -u)}"
+  local euid="${real_euid}"
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" == "1" ]] && [[ -n "${TS_TEST_EUID:-}" ]]; then
+    euid="${TS_TEST_EUID}"
+  fi
   if [[ "${euid}" -ne 0 ]]; then
     ts_die "${TS_EXIT_PRIVILEGE}" \
       "O helper administrativo 'scripts/install-system-packages.sh' exige execucao como root (UID 0). UID atual: ${euid}."
@@ -229,8 +235,14 @@ main() {
     exit "${TS_EXIT_OK}"
   fi
 
-  if ! command -v apt-get >/dev/null 2>&1; then
+  local apt_bin=""
+  apt_bin="$(command -v apt-get 2>/dev/null || true)"
+  if [[ -z "${apt_bin}" ]]; then
     ts_die "${TS_EXIT_ERR}" "Comando 'apt-get' nao encontrado no sistema."
+  fi
+  if [[ "${real_euid}" -ne 0 ]] && ! ts_is_effective_tmp_path "${apt_bin}"; then
+    ts_die "${TS_EXIT_PRIVILEGE}" \
+      "Recusando executar '${apt_bin}' real sem UID 0 real do kernel (UID real: ${real_euid})."
   fi
 
   ts_info "Atualizando indices APT e instalando pacotes ausentes (${#missing_packages[@]}): ${missing_packages[*]}"

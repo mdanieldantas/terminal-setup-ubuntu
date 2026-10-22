@@ -42,7 +42,8 @@ resolve_repo_root() {
   cd -P "$(dirname "${source_path}")/../.." >/dev/null 2>&1 && pwd
 }
 
-readonly REPO_ROOT="$(resolve_repo_root)"
+REPO_ROOT="$(resolve_repo_root)"
+readonly REPO_ROOT
 readonly INSTALLER="${REPO_ROOT}/install-terminal.sh"
 readonly DOCTOR="${REPO_ROOT}/doctor.sh"
 readonly UNINSTALLER="${REPO_ROOT}/uninstall-terminal.sh"
@@ -202,7 +203,7 @@ fi
 # Testar ts_validate_tar_gz_archive em ambiente Ubuntu 24.04 real:
 #   3a. Caso positivo: estrutura ./dist/.../spf válida
 #   3b. Caso negativo: pacote contendo path traversal (../) deve ser rejeitado
-(
+if (
   # shellcheck source=lib/common.sh
   source "${REPO_ROOT}/lib/common.sh"
   # shellcheck source=lib/downloads.sh
@@ -216,10 +217,13 @@ fi
   tar -czf "${TMP_TAR_TEST}/valid-spf.tar.gz" -C "${TMP_TAR_TEST}" "./dist/superfile-linux-v1.6.0-amd64/spf"
 
   ts_validate_tar_gz_archive "${TMP_TAR_TEST}/valid-spf.tar.gz"
-) && pass "ts_validate_tar_gz_archive (caso positivo) aprova estrutura ./dist/.../spf no Ubuntu 24.04" \
-  || fail "ts_validate_tar_gz_archive falhou em arquivo tar.gz válido no Ubuntu 24.04"
+); then
+  pass "ts_validate_tar_gz_archive (caso positivo) aprova estrutura ./dist/.../spf no Ubuntu 24.04"
+else
+  fail "ts_validate_tar_gz_archive falhou em arquivo tar.gz válido no Ubuntu 24.04"
+fi
 
-(
+if (
   # shellcheck source=lib/common.sh
   source "${REPO_ROOT}/lib/common.sh"
   # shellcheck source=lib/downloads.sh
@@ -229,15 +233,24 @@ fi
   trap 'rm -rf -- "${TMP_TAR_BAD}"' EXIT
 
   mkdir -p "${TMP_TAR_BAD}/sub"
-  printf 'malicious\n' > "${TMP_TAR_BAD}/evil.txt"
-  tar -czf "${TMP_TAR_BAD}/traversal.tar.gz" -C "${TMP_TAR_BAD}/sub" "../evil.txt" 2>/dev/null
+  printf 'malicious\n' >"${TMP_TAR_BAD}/evil.txt"
+  # Nota: -P e usado SOMENTE nesta criacao de fixture para preservar '../evil.txt' no tarball
+  tar -czPf "${TMP_TAR_BAD}/traversal.tar.gz" -C "${TMP_TAR_BAD}/sub" "../evil.txt" 2>/dev/null
+
+  # Confirmar primeiro que o tarball realmente contem '../evil.txt'
+  if ! tar -tzf "${TMP_TAR_BAD}/traversal.tar.gz" 2>/dev/null | grep -qxF "../evil.txt"; then
+    exit 2
+  fi
 
   if ts_validate_tar_gz_archive "${TMP_TAR_BAD}/traversal.tar.gz" 2>/dev/null; then
     exit 1
   fi
   exit 0
-) && pass "ts_validate_tar_gz_archive (caso negativo) rejeita arquivo tar.gz com path traversal ('../evil.txt')" \
-  || fail "ts_validate_tar_gz_archive não rejeitou arquivo tar.gz com path traversal"
+); then
+  pass "ts_validate_tar_gz_archive (caso negativo) rejeita arquivo tar.gz confirmado com '../evil.txt'"
+else
+  fail "ts_validate_tar_gz_archive não rejeitou arquivo tar.gz com path traversal (ou fixture inválida)"
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Plugins Zsh instalados nos commits fixados em versions/plugins.lock.json
@@ -292,13 +305,13 @@ ZSH_PROBE_OUT="$(
 ZSH_STDERR_CONTENT="$(cat "${ZSH_STDERR_FILE}")"
 rm -f -- "${ZSH_STDERR_FILE}"
 
-if [[ -z "${ZSH_STDERR_CONTENT}" ]] &&
-   [[ "${ZSH_PROBE_OUT}" == *"ICONS=plain"* ]] &&
-   [[ "${ZSH_PROBE_OUT}" == *"VIMODE=false"* ]] &&
-   [[ "${ZSH_PROBE_OUT}" == *"AUTOSUGGEST=1"* ]] &&
-   [[ "${ZSH_PROBE_OUT}" == *"HIGHLIGHT=1"* ]] &&
-   [[ "${ZSH_PROBE_OUT}" == *"HISTSUB=1"* ]] &&
-   [[ "${ZSH_PROBE_OUT}" != *"INVASIVE_ALIAS:"* ]]; then
+if [[ -z "${ZSH_STDERR_CONTENT}" ]] \
+  && [[ "${ZSH_PROBE_OUT}" == *"ICONS=plain"* ]] \
+  && [[ "${ZSH_PROBE_OUT}" == *"VIMODE=false"* ]] \
+  && [[ "${ZSH_PROBE_OUT}" == *"AUTOSUGGEST=1"* ]] \
+  && [[ "${ZSH_PROBE_OUT}" == *"HIGHLIGHT=1"* ]] \
+  && [[ "${ZSH_PROBE_OUT}" == *"HISTSUB=1"* ]] \
+  && [[ "${ZSH_PROBE_OUT}" != *"INVASIVE_ALIAS:"* ]]; then
   pass "Zsh interativo inicializa sem erros em stderr, carrega os 3 plugins e preserva ls/cat/find/grep/cd/vi/vim/top/htop sem aliases invasivos"
 else
   fail "Falha na sonda do Zsh interativo" "out='${ZSH_PROBE_OUT}', stderr='${ZSH_STDERR_CONTENT}'"
@@ -399,11 +412,11 @@ SNAPSHOT_AFTER="$(
   done
 )"
 BACKUPS_AFTER="$(find /home/dev/.local/state/terminal-setup/backups -type f 2>/dev/null | wc -l)"
-LATEST_MANIFEST="$(ls -t /home/dev/.local/state/terminal-setup/manifests/*.json | head -n 1)"
+LATEST_MANIFEST="$(find /home/dev/.local/state/terminal-setup/manifests -maxdepth 1 -type f -name '*.json' | sort | tail -n 1)"
 
-if [[ "${SNAPSHOT_BEFORE}" == "${SNAPSHOT_AFTER}" ]] &&
-   [[ "${BACKUPS_BEFORE}" -eq "${BACKUPS_AFTER}" ]] &&
-   jq -e 'all(.entries[]; .action == "unchanged")' "${LATEST_MANIFEST}" >/dev/null; then
+if [[ "${SNAPSHOT_BEFORE}" == "${SNAPSHOT_AFTER}" ]] \
+  && [[ "${BACKUPS_BEFORE}" -eq "${BACKUPS_AFTER}" ]] \
+  && jq -e 'all(.entries[]; .action == "unchanged")' "${LATEST_MANIFEST}" >/dev/null; then
   pass "Segunda execução no container preservou inodes, mtimes e SHA-256 dos 17 recursos verificados, sem criar backups extras e registrando action='unchanged' no manifesto"
 else
   fail "Segunda execução no container regravou arquivos ou produziu alterações desnecessárias"
@@ -430,11 +443,11 @@ fi
 # ------------------------------------------------------------------------------
 # 10. --non-interactive com stdin fechado (/dev/null) termina sem travar
 if timeout 30s bash "${INSTALLER}" \
-     --profile developer \
-     --non-interactive \
-     --skip-system-packages \
-     --git-identity skip \
-     --change-shell no </dev/null >/dev/null 2>&1; then
+  --profile developer \
+  --non-interactive \
+  --skip-system-packages \
+  --git-identity skip \
+  --change-shell no </dev/null >/dev/null 2>&1; then
   pass "Execução com --non-interactive e stdin fechado (/dev/null) conclui sem prompts nem travamento"
 else
   fail "Execução com --non-interactive e stdin fechado falhou ou travou"
@@ -470,7 +483,7 @@ fi
 
 # Testar ciclo completo de instalação + backup + restauração (uninstall-terminal.sh)
 # em um HOME isolado dentro do container Ubuntu 24.04 (sem desconfigurar /home/dev)
-(
+if (
   TMP_HOME="$(mktemp -d)"
   trap 'rm -rf -- "${TMP_HOME}"' EXIT
 
@@ -479,10 +492,10 @@ fi
   export XDG_STATE_HOME="${TMP_HOME}/.local/state"
   export XDG_DATA_HOME="${TMP_HOME}/.local/share"
 
-  printf '# Dotfile original do usuario\n' > "${TMP_HOME}/.zshrc"
+  printf '# Dotfile original do usuario\n' >"${TMP_HOME}/.zshrc"
   ORIG_SHA="$(sha256sum "${TMP_HOME}/.zshrc" | awk '{print $1}')"
 
-  TS_SKIP_EXTERNAL_DOWNLOADS="true" bash "${INSTALLER}" \
+  TS_TEST_SANDBOX_MODE="1" TS_TEST_SKIP_EXTERNAL_DOWNLOADS="true" bash "${INSTALLER}" \
     --profile minimal \
     --non-interactive \
     --skip-system-packages \
@@ -491,7 +504,7 @@ fi
     --change-shell no </dev/null >/dev/null
 
   # Criar arquivo não gerenciado que deve ser preservado na desinstalação
-  printf '# Nota pessoal\n' > "${XDG_CONFIG_HOME}/terminal-setup/zsh/minha-nota.zsh"
+  printf '# Nota pessoal\n' >"${XDG_CONFIG_HOME}/terminal-setup/zsh/minha-nota.zsh"
 
   bash "${UNINSTALLER}" --non-interactive </dev/null >/dev/null
 
@@ -499,8 +512,22 @@ fi
   [[ "${RESTORED_SHA}" == "${ORIG_SHA}" ]]
   [[ -f "${XDG_CONFIG_HOME}/terminal-setup/zsh/minha-nota.zsh" ]]
   [[ ! -e "${XDG_CONFIG_HOME}/starship.toml" ]]
-) && pass "Ciclo de uninstall-terminal.sh no container restaura backup original e preserva arquivos desconhecidos" \
-  || fail "Falha no teste de restauração/desinstalação dentro do container"
+); then
+  pass "Ciclo de uninstall-terminal.sh no container restaura backup original e preserva arquivos desconhecidos"
+else
+  fail "Falha no teste de restauração/desinstalação dentro do container"
+fi
+
+# 13. Verificar que hooks TS_TEST_* sao neutralizados na execucao normal (HOME=/home/dev)
+set +e
+TS_TEST_EUID=0 bash "${REPO_ROOT}/scripts/install-system-packages.sh" --profile minimal --dry-run >/dev/null 2>&1
+HOOK_HELPER_RC=$?
+set -e
+if [[ "${HOOK_HELPER_RC}" -eq 4 ]]; then
+  pass "Hooks TS_TEST_* bloqueados em execução normal: TS_TEST_EUID=0 não permite burlar verificação de UID 0 no helper APT (rc=4)"
+else
+  fail "TS_TEST_EUID=0 burlou verificação de UID 0 no helper APT em execução normal (rc=${HOOK_HELPER_RC})"
+fi
 
 printf '======================================================================\n'
 printf 'Resumo da Integração Ubuntu 24.04: %d PASS, %d FAIL\n' "${PASS_COUNT}" "${FAIL_COUNT}"
@@ -510,4 +537,3 @@ if [[ "${FAIL_COUNT}" -gt 0 ]]; then
   exit 1
 fi
 exit 0
-

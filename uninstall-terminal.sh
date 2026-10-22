@@ -16,6 +16,7 @@
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   printf '[ERRO] Este script nao deve ser carregado com "source". Execute: bash ./uninstall-terminal.sh [opcoes]\n' >&2
+  # shellcheck disable=SC2317 # fallback caso return falhe fora de contexto source
   return 2 2>/dev/null || exit 2
 fi
 
@@ -34,7 +35,8 @@ ts_resolve_repo_root() {
   cd -P "$(dirname "${source_path}")" >/dev/null 2>&1 && pwd
 }
 
-readonly TS_REPO_ROOT="$(ts_resolve_repo_root)"
+TS_REPO_ROOT="$(ts_resolve_repo_root)"
+readonly TS_REPO_ROOT
 
 # shellcheck source=lib/common.sh
 source "${TS_REPO_ROOT}/lib/common.sh"
@@ -51,7 +53,7 @@ UNINSTALL_RESTORE_ID=""
 UNINSTALL_ON_MODIFIED="keep"
 
 uninstall_print_help() {
-  cat << 'EOF'
+  cat <<'EOF'
 Uso:
   bash ./uninstall-terminal.sh [opcoes]
 
@@ -143,6 +145,7 @@ uninstall_parse_args() {
   fi
 }
 
+# shellcheck disable=SC2317 # funcao invocada indiretamente via trap EXIT
 cleanup_uninstall_lock() {
   local exit_code=$?
   ts_release_execution_lock

@@ -25,7 +25,8 @@ resolve_repo_root() {
   cd -P "$(dirname "${source_path}")/../.." >/dev/null 2>&1 && pwd
 }
 
-readonly REPO_ROOT="$(resolve_repo_root)"
+REPO_ROOT="$(resolve_repo_root)"
+readonly REPO_ROOT
 readonly DOCKERIGNORE="${REPO_ROOT}/.dockerignore"
 readonly DOCKERFILE="${REPO_ROOT}/docker/Dockerfile"
 readonly COMPOSE_FILE="${REPO_ROOT}/docker/compose.yaml"
@@ -66,15 +67,15 @@ else
 fi
 
 # 3. Verificações do .dockerignore (Seções 12 e 15)
-if grep -qxF ".git" "${DOCKERIGNORE}" &&
-   grep -qxF "terminal.conf" "${DOCKERIGNORE}" &&
-   grep -qxF "!examples/terminal.conf.example" "${DOCKERIGNORE}" &&
-   grep -qxF "!profiles/*.conf" "${DOCKERIGNORE}" &&
-   grep -qxF "*.log" "${DOCKERIGNORE}" &&
-   grep -qxF "*.bak" "${DOCKERIGNORE}" &&
-   grep -qxF "backups/" "${DOCKERIGNORE}" &&
-   grep -qxF ".env" "${DOCKERIGNORE}" &&
-   grep -qxF "*.key" "${DOCKERIGNORE}"; then
+if grep -qxF ".git" "${DOCKERIGNORE}" \
+  && grep -qxF "terminal.conf" "${DOCKERIGNORE}" \
+  && grep -qxF "!examples/terminal.conf.example" "${DOCKERIGNORE}" \
+  && grep -qxF "!profiles/*.conf" "${DOCKERIGNORE}" \
+  && grep -qxF "*.log" "${DOCKERIGNORE}" \
+  && grep -qxF "*.bak" "${DOCKERIGNORE}" \
+  && grep -qxF "backups/" "${DOCKERIGNORE}" \
+  && grep -qxF ".env" "${DOCKERIGNORE}" \
+  && grep -qxF "*.key" "${DOCKERIGNORE}"; then
   pass ".dockerignore exclui .git, terminal.conf, logs, backups e segredos preservando examples/terminal.conf.example e profiles/*.conf"
 else
   fail ".dockerignore não contém todas as regras obrigatórias das Seções 12 e 15"
@@ -87,8 +88,8 @@ else
   fail "Dockerfile não usa base ubuntu:24.04"
 fi
 
-if grep -q 'scripts/install-system-packages.sh --profile' "${DOCKERFILE}" &&
-   grep -q 'rm -rf /var/lib/apt/lists/\*' "${DOCKERFILE}"; then
+if grep -q 'scripts/install-system-packages.sh --profile' "${DOCKERFILE}" \
+  && grep -q 'rm -rf /var/lib/apt/lists/\*' "${DOCKERFILE}"; then
   pass "Dockerfile instala pacotes APT via helper oficial e limpa /var/lib/apt/lists/* na mesma camada"
 else
   fail "Dockerfile não executa o helper APT ou não limpa /var/lib/apt/lists/*"
@@ -115,10 +116,10 @@ else
   fail "Dockerfile não alterna para USER não-root antes de install-terminal.sh"
 fi
 
-if grep -q -- '--non-interactive' "${DOCKERFILE}" &&
-   grep -q -- '--skip-system-packages' "${DOCKERFILE}" &&
-   grep -q -- '--git-identity skip' "${DOCKERFILE}" &&
-   grep -q -- '--change-shell no' "${DOCKERFILE}"; then
+if grep -q -- '--non-interactive' "${DOCKERFILE}" \
+  && grep -q -- '--skip-system-packages' "${DOCKERFILE}" \
+  && grep -q -- '--git-identity skip' "${DOCKERFILE}" \
+  && grep -q -- '--change-shell no' "${DOCKERFILE}"; then
   pass "Dockerfile invoca install-terminal.sh com --non-interactive --skip-system-packages --git-identity skip --change-shell no"
 else
   fail "Dockerfile não passa todas as flags obrigatórias ao install-terminal.sh"
@@ -137,12 +138,12 @@ else
   fail "docker/compose.yaml contém campo legado 'version'"
 fi
 
-if grep -qE '^  terminal:$' "${COMPOSE_FILE}" &&
-   grep -qE 'context: \.\.' "${COMPOSE_FILE}" &&
-   grep -qE 'dockerfile: docker/Dockerfile' "${COMPOSE_FILE}" &&
-   grep -qE 'stdin_open: true' "${COMPOSE_FILE}" &&
-   grep -qE 'tty: true' "${COMPOSE_FILE}" &&
-   grep -qE 'user: dev' "${COMPOSE_FILE}"; then
+if grep -qE '^  terminal:$' "${COMPOSE_FILE}" \
+  && grep -qE 'context: \.\.' "${COMPOSE_FILE}" \
+  && grep -qE 'dockerfile: docker/Dockerfile' "${COMPOSE_FILE}" \
+  && grep -qE 'stdin_open: true' "${COMPOSE_FILE}" \
+  && grep -qE 'tty: true' "${COMPOSE_FILE}" \
+  && grep -qE 'user: dev' "${COMPOSE_FILE}"; then
   pass "docker/compose.yaml define serviço 'terminal', context '..', dockerfile 'docker/Dockerfile', user 'dev', stdin_open e tty"
 else
   fail "docker/compose.yaml não cumpre todos os requisitos de estrutura da Seção 12/17"
@@ -152,6 +153,37 @@ if ! grep -vE '^[[:space:]]*#' "${COMPOSE_FILE}" | grep -qE 'privileged:|network
   pass "docker/compose.yaml não habilita privileged, host network, docker.sock nem volumes automáticos do host"
 else
   fail "docker/compose.yaml contém configuração insegura (privileged, host network, docker.sock ou volume ativo por padrão)"
+fi
+
+# 6. Verificação de segurança dos hooks TS_TEST_* em execução normal
+set +e
+TS_TEST_EUID=0 bash "${REPO_ROOT}/scripts/install-system-packages.sh" --profile minimal --dry-run >/dev/null 2>&1
+HOOK_RC1=$?
+set -e
+if [[ "${HOOK_RC1}" -eq 4 ]]; then
+  pass "Segurança TS_TEST_*: TS_TEST_EUID=0 em execução normal não contorna exigência de UID 0 no helper APT (código 4)"
+else
+  fail "TS_TEST_EUID=0 contornou exigência de UID 0 em scripts/install-system-packages.sh (código ${HOOK_RC1})"
+fi
+
+if (
+  export HOME="/nonexistent/normal-user-home"
+  export TS_TEST_EUID="99999"
+  export TS_TEST_PLUGIN_REPO_BASE="/tmp/evil-repo"
+  export TS_TEST_TOOLS_LOCK_FILE="/tmp/evil-tools.json"
+  # shellcheck source=lib/common.sh
+  source "${REPO_ROOT}/lib/common.sh"
+  # shellcheck source=lib/platform.sh
+  source "${REPO_ROOT}/lib/platform.sh"
+  ts_detect_platform
+  [[ -z "${TS_TEST_EUID:-}" ]] \
+    && [[ -z "${TS_TEST_PLUGIN_REPO_BASE:-}" ]] \
+    && [[ -z "${TS_TEST_TOOLS_LOCK_FILE:-}" ]] \
+    && [[ "${TS_EFFECTIVE_UID}" == "${EUID:-$(/usr/bin/id -u)}" ]]
+); then
+  pass "Segurança TS_TEST_*: ts_sanitize_test_hooks neutraliza variáveis TS_TEST_* na execução normal e preserva TS_EFFECTIVE_UID real"
+else
+  fail "ts_sanitize_test_hooks não neutralizou variáveis TS_TEST_* na execução normal"
 fi
 
 printf '======================================================================\n'

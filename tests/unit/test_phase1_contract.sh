@@ -19,6 +19,7 @@ INSTALLER="${REPO_ROOT}/install-terminal.sh"
 
 # Criar sandbox temporario exclusivo em /tmp
 SANDBOX_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/terminal-setup-phase1-tests.XXXXXX")"
+# shellcheck disable=SC2317 # funcao invocada indiretamente via trap EXIT
 cleanup() {
   if [[ -n "${SANDBOX_ROOT:-}" ]] && [[ -d "${SANDBOX_ROOT}" ]]; then
     chmod -R u+w "${SANDBOX_ROOT}" 2>/dev/null || true
@@ -59,7 +60,7 @@ setup_isolated_env() {
   # Criar mocks que registram caso sudo, apt-get, curl, git ou chsh sejam chamados
   local cmd
   for cmd in sudo apt-get apt curl wget git chsh; do
-    cat > "${MOCK_BIN}/${cmd}" << EOF
+    cat >"${MOCK_BIN}/${cmd}" <<EOF
 #!/usr/bin/env bash
 printf 'FORBIDDEN_CALL:%s %s\n' "${cmd}" "\$*" >> "${SIDE_EFFECT_LOG}"
 exit 99
@@ -76,6 +77,8 @@ run_installer() {
   if [[ -n "${extra_env_path}" ]]; then
     effective_path="${extra_env_path}"
   fi
+  local real_uid
+  real_uid="${EUID:-$(/usr/bin/id -u)}"
 
   OUT_STDOUT="${CASE_DIR}/stdout.txt"
   OUT_STDERR="${CASE_DIR}/stderr.txt"
@@ -89,8 +92,9 @@ run_installer() {
     XDG_CONFIG_HOME="${FAKE_XDG_CONFIG}" \
     XDG_STATE_HOME="${FAKE_XDG_STATE}" \
     XDG_DATA_HOME="${FAKE_XDG_DATA}" \
-    TS_TEST_EUID="${TEST_EUID_OVERRIDE:-1000}" \
-    TS_OS_RELEASE_FILE="${TEST_OS_RELEASE_OVERRIDE:-/etc/os-release}" \
+    TS_TEST_SANDBOX_MODE="1" \
+    TS_TEST_EUID="${TEST_EUID_OVERRIDE:-${real_uid}}" \
+    TS_TEST_OS_RELEASE_FILE="${TEST_OS_RELEASE_OVERRIDE:-/etc/os-release}" \
     TS_TEST_ARCH="${TEST_ARCH_OVERRIDE:-x86_64}" \
     bash "${INSTALLER}" "$@" </dev/null >"${OUT_STDOUT}" 2>"${OUT_STDERR}"
   RUN_EXIT=$?
@@ -202,11 +206,11 @@ done
 # Verificar decisoes P1 e P2 especificamente no plano do perfil developer
 setup_isolated_env "dryrun-dev-matrix"
 run_installer "" --profile developer --dry-run
-if grep -q "fd-find tmux zoxide eza" "${OUT_STDOUT}" &&
-   grep -q "starship (artefato oficial" "${OUT_STDOUT}" &&
-   grep -q "superfile (artefato oficial" "${OUT_STDOUT}" &&
-   grep -q "zsh-syntax-highlighting" "${OUT_STDOUT}" &&
-   ! grep -q "fast-syntax-highlighting" "${OUT_STDOUT}"; then
+if grep -q "fd-find tmux zoxide eza" "${OUT_STDOUT}" \
+  && grep -q "starship (artefato oficial" "${OUT_STDOUT}" \
+  && grep -q "superfile (artefato oficial" "${OUT_STDOUT}" \
+  && grep -q "zsh-syntax-highlighting" "${OUT_STDOUT}" \
+  && ! grep -q "fast-syntax-highlighting" "${OUT_STDOUT}"; then
   pass "Perfil 'developer' reflete P1 (eza/zoxide via APT; starship/superfile externos) e P2 (zsh-syntax-highlighting)"
 else
   fail "Plano do perfil 'developer' divergiu das decisoes P1/P2"
@@ -235,11 +239,11 @@ fi
 # ------------------------------------------------------------------------------
 setup_isolated_env "only-superfile"
 run_installer "" --only superfile --dry-run
-if [[ "${RUN_EXIT}" -eq 0 ]] &&
-   grep -q "superfile" "${OUT_STDOUT}" &&
-   grep -q "ca-certificates curl jq" "${OUT_STDOUT}" &&
-   ! grep -q "ripgrep" "${OUT_STDOUT}" &&
-   ! grep -q "tmux" "${OUT_STDOUT}"; then
+if [[ "${RUN_EXIT}" -eq 0 ]] \
+  && grep -q "superfile" "${OUT_STDOUT}" \
+  && grep -q "ca-certificates curl jq" "${OUT_STDOUT}" \
+  && ! grep -q "ripgrep" "${OUT_STDOUT}" \
+  && ! grep -q "tmux" "${OUT_STDOUT}"; then
   pass "--only superfile resolve apenas superfile e suas dependencias (ca-certificates, curl, jq)"
 else
   fail "--only superfile falhou na resolucao de dependencias (exit=${RUN_EXIT})"
@@ -286,9 +290,9 @@ assert_usage_failure "--git-email invalido" --git-identity configure --git-name 
 # ------------------------------------------------------------------------------
 setup_isolated_env "skip-git-profile"
 run_installer "" --profile developer --skip-git --dry-run
-if [[ "${RUN_EXIT}" -eq 0 ]] &&
-   grep -q "Plugins Zsh via Git com commit fixado (0):" "${OUT_STDOUT}" &&
-   grep -q "foram omitidos: git zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting" "${OUT_STDERR}"; then
+if [[ "${RUN_EXIT}" -eq 0 ]] \
+  && grep -q "Plugins Zsh via Git com commit fixado (0):" "${OUT_STDOUT}" \
+  && grep -q "foram omitidos: git zsh-autosuggestions zsh-history-substring-search zsh-syntax-highlighting" "${OUT_STDERR}"; then
   pass "--skip-git no perfil 'developer' omite Git e plugins Zsh com aviso claro"
 else
   fail "--skip-git no perfil 'developer' nao se comportou como esperado (exit=${RUN_EXIT})"
@@ -304,11 +308,11 @@ assert_usage_failure "--skip-git com --git-identity configure" --skip-git --git-
 # ------------------------------------------------------------------------------
 setup_isolated_env "non-interactive-defaults"
 run_installer "" --profile minimal --non-interactive --dry-run
-if [[ "${RUN_EXIT}" -eq 0 ]] &&
-   grep -q "Identidade Git       : skip" "${OUT_STDOUT}" &&
-   grep -q "Defaults globais Git : keep" "${OUT_STDOUT}" &&
-   grep -q "Troca de shell       : no" "${OUT_STDOUT}" &&
-   grep -q "Politica de conflito : keep" "${OUT_STDOUT}"; then
+if [[ "${RUN_EXIT}" -eq 0 ]] \
+  && grep -q "Identidade Git       : skip" "${OUT_STDOUT}" \
+  && grep -q "Defaults globais Git : keep" "${OUT_STDOUT}" \
+  && grep -q "Troca de shell       : no" "${OUT_STDOUT}" \
+  && grep -q "Politica de conflito : keep" "${OUT_STDOUT}"; then
   pass "--non-interactive converte 'ask' padrao em skip/keep/no/keep sem travar com stdin fechado"
 else
   fail "--non-interactive nao converteu politicas 'ask' corretamente (exit=${RUN_EXIT})"
@@ -320,13 +324,13 @@ assert_usage_failure "--non-interactive com --git-identity configure sem dados" 
 
 setup_isolated_env "yes-preserves-decisions"
 run_installer "" --profile minimal --yes --dry-run
-if [[ "${RUN_EXIT}" -eq 0 ]] &&
-   grep -q "Confirmacao (--yes)  : true" "${OUT_STDOUT}" &&
-   grep -q "Identidade Git       : ask" "${OUT_STDOUT}" &&
-   grep -q "Defaults globais Git : ask" "${OUT_STDOUT}" &&
-   grep -q "Troca de shell       : ask" "${OUT_STDOUT}" &&
-   grep -q "Politica de conflito : ask" "${OUT_STDOUT}" &&
-   grep -q "Modo Vi (Zsh)        : false" "${OUT_STDOUT}"; then
+if [[ "${RUN_EXIT}" -eq 0 ]] \
+  && grep -q "Confirmacao (--yes)  : true" "${OUT_STDOUT}" \
+  && grep -q "Identidade Git       : ask" "${OUT_STDOUT}" \
+  && grep -q "Defaults globais Git : ask" "${OUT_STDOUT}" \
+  && grep -q "Troca de shell       : ask" "${OUT_STDOUT}" \
+  && grep -q "Politica de conflito : ask" "${OUT_STDOUT}" \
+  && grep -q "Modo Vi (Zsh)        : false" "${OUT_STDOUT}"; then
   pass "--yes preserva decisoes pessoais/conflitos em 'ask' e vi-mode em 'false'"
 else
   fail "--yes alterou indevidamente politicas pessoais ou de conflito"
@@ -337,7 +341,7 @@ fi
 # ------------------------------------------------------------------------------
 setup_isolated_env "config-precedence"
 VALID_CONF="${CASE_DIR}/terminal.conf"
-cat > "${VALID_CONF}" << 'EOF'
+cat >"${VALID_CONF}" <<'EOF'
 # Comentario valido
 PROFILE=server
 ICONS=nerd
@@ -350,12 +354,12 @@ ON_CONFLICT=backup-replace
 EOF
 
 run_installer "" --config "${VALID_CONF}" --icons plain --on-conflict keep --dry-run
-if [[ "${RUN_EXIT}" -eq 0 ]] &&
-   grep -q "perfil 'server'" "${OUT_STDOUT}" &&
-   grep -q "Modo de icones       : plain" "${OUT_STDOUT}" &&
-   grep -q "Politica de conflito : keep" "${OUT_STDOUT}" &&
-   grep -q "Modo Vi (Zsh)        : true" "${OUT_STDOUT}" &&
-   grep -q "superfile" "${OUT_STDOUT}"; then
+if [[ "${RUN_EXIT}" -eq 0 ]] \
+  && grep -q "perfil 'server'" "${OUT_STDOUT}" \
+  && grep -q "Modo de icones       : plain" "${OUT_STDOUT}" \
+  && grep -q "Politica de conflito : keep" "${OUT_STDOUT}" \
+  && grep -q "Modo Vi (Zsh)        : true" "${OUT_STDOUT}" \
+  && grep -q "superfile" "${OUT_STDOUT}"; then
   pass "Parser de --config aplica valores corretamente e respeita precedencia (defaults < --config < CLI)"
 else
   fail "Falha na precedencia ou leitura de --config valido (exit=${RUN_EXIT})"
@@ -365,7 +369,7 @@ fi
 setup_isolated_env "config-malicious"
 PWN_MARKER="${CASE_DIR}/pwned.txt"
 MALICIOUS_CONF="${CASE_DIR}/malicious.conf"
-cat > "${MALICIOUS_CONF}" << EOF
+cat >"${MALICIOUS_CONF}" <<EOF
 PROFILE=minimal
 GIT_IDENTITY=configure
 GIT_NAME=\$(touch ${PWN_MARKER})
@@ -381,7 +385,7 @@ fi
 
 # Chave duplicada em terminal.conf
 DUP_CONF="${CASE_DIR}/dup.conf"
-cat > "${DUP_CONF}" << 'EOF'
+cat >"${DUP_CONF}" <<'EOF'
 PROFILE=minimal
 PROFILE=developer
 EOF
@@ -389,7 +393,7 @@ assert_usage_failure "chave duplicada em terminal.conf" --config "${DUP_CONF}" -
 
 # Chave desconhecida em terminal.conf
 UNK_CONF="${CASE_DIR}/unk.conf"
-cat > "${UNK_CONF}" << 'EOF'
+cat >"${UNK_CONF}" <<'EOF'
 PROFILE=minimal
 SUDO_PASSWORD=123456
 EOF
@@ -397,7 +401,7 @@ assert_usage_failure "chave desconhecida em terminal.conf" --config "${UNK_CONF}
 
 # Byte NUL em terminal.conf
 NUL_CONF="${CASE_DIR}/nul.conf"
-printf 'PROFILE=minimal\0\n' > "${NUL_CONF}"
+printf 'PROFILE=minimal\0\n' >"${NUL_CONF}"
 assert_usage_failure "byte NUL em terminal.conf" --config "${NUL_CONF}" --dry-run
 
 # Conflito entre PROFILE em --config e --only na CLI
@@ -415,7 +419,7 @@ fi
 # Requisito de jq informado claramente em operacao efetiva com --skip-system-packages quando jq esta ausente (Decisao P3)
 setup_isolated_env "effective-requires-jq"
 FAKE_OS_RELEASE="${CASE_DIR}/os-release-ubuntu"
-cat > "${FAKE_OS_RELEASE}" << 'EOF'
+cat >"${FAKE_OS_RELEASE}" <<'EOF'
 ID=ubuntu
 VERSION_ID="24.04"
 PRETTY_NAME="Ubuntu 24.04.1 LTS"

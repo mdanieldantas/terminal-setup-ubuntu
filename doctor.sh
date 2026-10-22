@@ -14,6 +14,7 @@
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   printf '[ERRO] Este script nao deve ser carregado com "source". Execute: bash ./doctor.sh [opcoes]\n' >&2
+  # shellcheck disable=SC2317 # fallback caso return falhe fora de contexto source
   return 2 2>/dev/null || exit 2
 fi
 
@@ -32,7 +33,8 @@ ts_resolve_repo_root() {
   cd -P "$(dirname "${source_path}")" >/dev/null 2>&1 && pwd
 }
 
-readonly TS_REPO_ROOT="$(ts_resolve_repo_root)"
+TS_REPO_ROOT="$(ts_resolve_repo_root)"
+readonly TS_REPO_ROOT
 
 # shellcheck source=lib/common.sh
 source "${TS_REPO_ROOT}/lib/common.sh"
@@ -52,7 +54,7 @@ DOCTOR_JSON="false"
 DOCTOR_STRICT="false"
 
 doctor_print_help() {
-  cat << 'EOF'
+  cat <<'EOF'
 Uso:
   bash ./doctor.sh [opcoes]
 
@@ -287,10 +289,10 @@ main() {
   local -a opt_comps=()
   local parsed_csv comp
   parsed_csv="$(ts_split_csv_strict "${TS_PROFILE_VALUES[REQUIRED_COMPONENTS]}")"
-  mapfile -t req_comps <<< "${parsed_csv}"
+  mapfile -t req_comps <<<"${parsed_csv}"
   if [[ -n "${TS_PROFILE_VALUES[OPTIONAL_COMPONENTS]:-}" ]]; then
     parsed_csv="$(ts_split_csv_strict "${TS_PROFILE_VALUES[OPTIONAL_COMPONENTS]}")"
-    mapfile -t opt_comps <<< "${parsed_csv}"
+    mapfile -t opt_comps <<<"${parsed_csv}"
   fi
 
   for comp in "${req_comps[@]}"; do

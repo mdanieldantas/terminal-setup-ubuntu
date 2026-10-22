@@ -1,14 +1,9 @@
 # ==============================================================================
 # config/zsh/aliases.zsh — Atalhos conservadores (terminal-setup)
-# Regra obrigatoria (Secao 2 do guia): NAO substituir silenciosamente
-# cat, ls, grep, find, rm ou cd. Criar apenas atalhos opcionais.
+# Regra obrigatoria (Secao 2 do guia): NAO definir aliases sobre
+# cat, ls, grep, find, rm, cd, vi, vim, top ou htop. Criar apenas atalhos
+# opcionais separados (ll, la, lt, batp, fdf, fdd).
 # ==============================================================================
-
-# Habilitar cor nas ferramentas GNU tradicionais sem alterar sua semantica
-if ls --color=auto / >/dev/null 2>&1; then
-  alias ls='ls --color=auto'
-fi
-alias grep='grep --color=auto'
 
 # Atalhos opcionais para listagem: usam eza se disponivel, com fallback para ls
 # O modo de icones respeita TS_ICONS_MODE (plain por padrao, nerd se configurado)

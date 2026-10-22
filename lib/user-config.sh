@@ -22,7 +22,7 @@ ts_effective_zdotdir() {
 # Gera arquivo temporario deterministico com as opcoes visuais selecionadas (icons / vi-mode)
 ts_write_temp_zsh_options_file() {
   local dest_tmp="$1"
-  cat > "${dest_tmp}" << EOF
+  cat >"${dest_tmp}" <<EOF
 # ==============================================================================
 # options.zsh — Opcoes visuais geradas pelo terminal-setup (nao edite manualmente)
 # ==============================================================================
@@ -130,4 +130,3 @@ ts_apply_user_configurations() {
     fi
   fi
 }
-

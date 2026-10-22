@@ -37,7 +37,11 @@ ts_validate_plugins_lock_file() {
 ts_install_single_zsh_plugin() {
   local repo_root="$1"
   local plugin_name="$2"
-  local lock_file="${TS_PLUGINS_LOCK_FILE:-${repo_root}/versions/plugins.lock.json}"
+  local lock_file="${repo_root}/versions/plugins.lock.json"
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" == "1" ]] \
+    && ts_is_effective_tmp_path "${TS_TEST_PLUGINS_LOCK_FILE:-}"; then
+    lock_file="${TS_TEST_PLUGINS_LOCK_FILE}"
+  fi
 
   ts_validate_plugins_lock_file "${lock_file}"
 
@@ -51,8 +55,9 @@ ts_install_single_zsh_plugin() {
   entry_file="$(jq -r --arg p "${plugin_name}" '.plugins[$p].entry_file' "${lock_file}")"
   tag_name="$(jq -r --arg p "${plugin_name}" '.plugins[$p].tag' "${lock_file}")"
 
-  # Permitir override de repositorio base apenas para testes locais isolados sem rede
-  if [[ -n "${TS_TEST_PLUGIN_REPO_BASE:-}" ]]; then
+  # Permitir mock de repositorio local apenas para testes unitarios sobre caminho efetivo em /tmp
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" == "1" ]] \
+    && ts_is_effective_tmp_path "${TS_TEST_PLUGIN_REPO_BASE:-}"; then
     repo_url="${TS_TEST_PLUGIN_REPO_BASE}/${plugin_name}.git"
   elif ! ts_validate_https_url "${repo_url}"; then
     ts_die "${TS_EXIT_ERR}" "URL de repositorio invalida para o plugin '${plugin_name}': '${repo_url}'."
@@ -134,11 +139,11 @@ ts_install_single_zsh_plugin() {
 
   ts_info "Obtendo plugin Zsh '${plugin_name}' (${tag_name}, commit ${expected_commit:0:12})..."
   if ! (
-    cd "${tmp_clone_dir}" &&
-    GIT_TERMINAL_PROMPT=0 git init -q &&
-    GIT_TERMINAL_PROMPT=0 git remote add origin "${repo_url}" &&
-    GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth 1 origin "${expected_commit}" &&
-    GIT_TERMINAL_PROMPT=0 git checkout --quiet --detach FETCH_HEAD
+    cd "${tmp_clone_dir}" \
+      && GIT_TERMINAL_PROMPT=0 git init -q \
+      && GIT_TERMINAL_PROMPT=0 git remote add origin "${repo_url}" \
+      && GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth 1 origin "${expected_commit}" \
+      && GIT_TERMINAL_PROMPT=0 git checkout --quiet --detach FETCH_HEAD
   ); then
     rm -rf -- "${tmp_clone_dir}"
     ts_die "${TS_EXIT_ERR}" "Falha ao obter o commit fixado '${expected_commit}' do plugin '${plugin_name}'."

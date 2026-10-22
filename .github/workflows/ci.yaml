@@ -1,0 +1,167 @@
+# ==============================================================================
+# .github/workflows/ci.yaml — Pipeline de Integracao Continua (CI)
+# Projeto: terminal-setup (Ubuntu 24.04 LTS amd64)
+#
+# Regras de seguranca e reprodutibilidade (Secao 15 do guia):
+#   - Permissoes minimas (contents: read).
+#   - Timeout explicito por job.
+#   - Dependencias de GitHub Actions fixadas em commit SHA de 40 caracteres verificado.
+#   - Nenhuma credencial pessoal, chave privada ou publicacao automatica de imagens.
+#   - Distingue validacao sintatica/estatica (Bash vs Zsh), suites unitarias/Bats
+#     e integracao em container descartavel Ubuntu 24.04 com --network none.
+# ==============================================================================
+
+name: CI — terminal-setup (Ubuntu 24.04 amd64)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-and-unit:
+    name: Qualidade Estatica e Testes Unitarios (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout do repositorio (actions/checkout@v4.2.2 fixado por commit SHA)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Instalar ferramentas de qualidade do Ubuntu 24.04 (APT noble)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            bats \
+            ca-certificates \
+            curl \
+            git \
+            jq \
+            shellcheck \
+            shfmt \
+            zsh
+
+      - name: Identificar versoes exatas das ferramentas de qualidade
+        run: |
+          bash --version | head -n 1
+          zsh --version
+          jq --version
+          shellcheck --version
+          shfmt --version
+          bats --version
+
+      - name: Validar sintaxe individual de cada script Bash (bash -n)
+        run: |
+          set -Eeuo pipefail
+          for f in \
+            install-terminal.sh \
+            doctor.sh \
+            uninstall-terminal.sh \
+            scripts/install-system-packages.sh \
+            lib/*.sh \
+            tests/unit/*.sh \
+            tests/integration/*.sh; do
+            printf '[bash -n] %s\n' "${f}"
+            bash -n "${f}"
+          done
+
+      - name: Validar sintaxe individual de cada arquivo Zsh (zsh -n, sem trata-los como Bash)
+        run: |
+          set -Eeuo pipefail
+          for zf in \
+            config/zsh/zshenv.template \
+            config/zsh/zshrc \
+            config/zsh/*.zsh; do
+            printf '[zsh -n] %s\n' "${zf}"
+            zsh -n "${zf}"
+          done
+
+      - name: Verificar formatacao dos scripts Bash com shfmt (modo diff/verificacao)
+        run: |
+          shfmt -d -i 2 -ci -bn \
+            install-terminal.sh \
+            doctor.sh \
+            uninstall-terminal.sh \
+            scripts/install-system-packages.sh \
+            lib/*.sh \
+            tests/unit/*.sh \
+            tests/integration/*.sh
+
+      - name: Executar analise estatica ShellCheck apenas nos scripts Bash
+        run: |
+          shellcheck -x \
+            install-terminal.sh \
+            doctor.sh \
+            uninstall-terminal.sh \
+            scripts/install-system-packages.sh \
+            lib/*.sh \
+            tests/unit/*.sh \
+            tests/integration/*.sh
+
+      - name: Executar suites unitarias via adaptadores Bats-core
+        run: |
+          bats tests/bats/
+
+  container-integration:
+    name: Integracao em Container Ubuntu 24.04 (${{ matrix.profile }})
+    needs: static-and-unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        profile:
+          - developer
+          - minimal
+          - server
+    steps:
+      - name: Checkout do repositorio (actions/checkout@v4.2.2 fixado por commit SHA)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Construir imagem de container Ubuntu 24.04 para o perfil ${{ matrix.profile }}
+        run: |
+          docker build \
+            --file docker/Dockerfile \
+            --build-arg PROFILE="${{ matrix.profile }}" \
+            --tag "terminal-setup:ci-${{ matrix.profile }}" \
+            .
+
+      - name: Verificar execucao como usuario nao-root e diagnostico offline (--network none)
+        run: |
+          set -Eeuo pipefail
+          docker run --rm --network none \
+            "terminal-setup:ci-${{ matrix.profile }}" \
+            bash /opt/terminal-setup/doctor.sh --profile "${{ matrix.profile }}"
+
+      - name: Executar suite completa de integracao Ubuntu 24.04 (perfil developer)
+        if: matrix.profile == 'developer'
+        run: |
+          docker run --rm --network none \
+            "terminal-setup:ci-developer" \
+            bash /opt/terminal-setup/tests/integration/test_ubuntu2404_container.sh
+
+      - name: Inspecao somente leitura de isolamento de /root (--network none --read-only --user 0:0)
+        run: |
+          docker run --rm --network none --read-only --user 0:0 \
+            "terminal-setup:ci-${{ matrix.profile }}" \
+            bash -c '
+              set -Eeuo pipefail
+              for p in /root/.zshrc /root/.zshenv /root/.gitconfig /root/.config/starship.toml /root/.local/state/terminal-setup; do
+                if [[ -e "${p}" ]] || [[ -L "${p}" ]]; then
+                  printf "[FAIL] Artefato indevido em %s\n" "${p}" >&2
+                  exit 1
+                fi
+              done
+              printf "[OK] /root limpo para o perfil %s\n" "${{ matrix.profile }}"
+            '
+

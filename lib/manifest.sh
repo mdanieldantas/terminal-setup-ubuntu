@@ -98,7 +98,7 @@ ts_manifest_init() {
       xdg_data_home: $xdg_data_home,
       zdotdir: $zdotdir,
       entries: []
-    }' > "${tmp_manifest}"
+    }' >"${tmp_manifest}"
 
   chmod 600 "${tmp_manifest}" 2>/dev/null || true
   mv -Tf -- "${tmp_manifest}" "${TS_CURRENT_MANIFEST_FILE}"
@@ -162,7 +162,7 @@ ts_manifest_record_entry() {
       installed_symlink_target: (if $installed_symlink_target == "" then null else $installed_symlink_target end),
       installed_version: (if $installed_version == "" then null else $installed_version end),
       action: $action
-    }]' "${TS_CURRENT_MANIFEST_FILE}" > "${tmp_manifest}"
+    }]' "${TS_CURRENT_MANIFEST_FILE}" >"${tmp_manifest}"
 
   chmod 600 "${tmp_manifest}" 2>/dev/null || true
   mv -Tf -- "${tmp_manifest}" "${TS_CURRENT_MANIFEST_FILE}"
@@ -187,7 +187,7 @@ ts_manifest_finalize() {
     --arg status "${final_status}" \
     --arg completed_at "${ts_utc}" \
     '.status = $status | .completed_at_utc = $completed_at' \
-    "${TS_CURRENT_MANIFEST_FILE}" > "${tmp_manifest}"
+    "${TS_CURRENT_MANIFEST_FILE}" >"${tmp_manifest}"
 
   chmod 600 "${tmp_manifest}" 2>/dev/null || true
   mv -Tf -- "${tmp_manifest}" "${TS_CURRENT_MANIFEST_FILE}"
@@ -277,6 +277,7 @@ ts_manifest_stream_entries_nul() {
 
 # Le uma entrada completa (14 campos NUL-terminated) produzida por ts_manifest_stream_entries_nul
 # Define variaveis globais TS_ME_* para o chamador
+# shellcheck disable=SC2034 # TS_ME_* sao lidas por doctor.sh, uninstall-terminal.sh e ts_validate_manifest_file
 ts_manifest_read_entry_nul() {
   IFS= read -r -d '' TS_ME_PATH || return 1
   IFS= read -r -d '' TS_ME_RESOURCE_TYPE || return 1
@@ -312,13 +313,15 @@ ts_validate_manifest_file() {
     return 1
   fi
 
-  if ! jq -e '
+  if ! jq -e \
+    --argjson expected_uid "${TS_EFFECTIVE_UID}" \
+    --arg expected_home "${HOME}" '
     type == "object" and
     .schema_version == 1 and
     .project == "terminal-setup" and
     (.install_id | type == "string" and length > 0) and
-    (.uid | type == "number") and
-    (.home | type == "string" and startswith("/")) and
+    (.uid | type == "number" and . == $expected_uid) and
+    (.home | type == "string" and . == $expected_home) and
     (.entries | type == "array") and
     all(.entries[];
       type == "object" and

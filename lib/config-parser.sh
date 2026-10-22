@@ -43,8 +43,8 @@ declare -gA TS_PROFILE_VALUES=()
 ts_file_has_nul_byte() {
   local filepath="$1"
   local file_size char_count
-  file_size="$(wc -c < "${filepath}" 2>/dev/null | tr -d '[:space:]')"
-  char_count="$(LC_ALL=C tr -d '\000' < "${filepath}" 2>/dev/null | wc -c | tr -d '[:space:]')"
+  file_size="$(wc -c <"${filepath}" 2>/dev/null | tr -d '[:space:]')"
+  char_count="$(LC_ALL=C tr -d '\000' <"${filepath}" 2>/dev/null | wc -c | tr -d '[:space:]')"
   if [[ "${file_size}" != "${char_count}" ]]; then
     return 0
   fi
@@ -55,6 +55,7 @@ ts_file_has_nul_byte() {
 ts_reject_shell_expansion_syntax() {
   local value="$1"
   local context_label="$2"
+  # shellcheck disable=SC2016 # aspas simples intencionais: buscamos literalmente os tokens $(, ` e ${
   if [[ "${value}" == *'$('* ]] || [[ "${value}" == *'`'* ]] || [[ "${value}" == *'${'* ]]; then
     ts_die_usage "${context_label}: sintaxe de expansao ou substituicao de shell nao e permitida ('${value}')."
   fi
@@ -163,12 +164,13 @@ ts_parse_kv_file() {
     else
       TS_PROFILE_VALUES["${key}"]="${value}"
     fi
-  done < "${filepath}"
+  done <"${filepath}"
 }
 
 # Carrega e valida um arquivo terminal.conf explicitamente indicado via --config
 ts_load_user_config_file() {
   local filepath="$1"
+  # shellcheck disable=SC2034 # TS_CONFIG_VALUES e preenchido por ts_parse_kv_file e lido por lib/arguments.sh
   TS_CONFIG_VALUES=()
   ts_parse_kv_file "${filepath}" "user"
 }
@@ -190,4 +192,3 @@ ts_load_profile_file() {
     ts_die "${TS_EXIT_ERR}" "Inconsistencia no perfil '${profile_path}': PROFILE_NAME='${TS_PROFILE_VALUES[PROFILE_NAME]:-}'."
   fi
 }
-

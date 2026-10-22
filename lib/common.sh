@@ -10,21 +10,113 @@ if [[ -n "${TS_COMMON_LOADED:-}" ]]; then
 fi
 readonly TS_COMMON_LOADED=1
 
-readonly TS_PROJECT_NAME="terminal-setup"
-readonly TS_PROJECT_VERSION="0.3.0-phase3"
-readonly TS_SUPPORTED_DISTRO_ID="ubuntu"
-readonly TS_SUPPORTED_DISTRO_VERSION="24.04"
-readonly TS_SUPPORTED_ARCH="amd64"
+# Constantes e codigos de saida estaveis consumidos pelos modulos e scripts chamadores
+# shellcheck disable=SC2034
+readonly \
+  TS_PROJECT_NAME="terminal-setup" \
+  TS_PROJECT_VERSION="0.5.0-phase5" \
+  TS_SUPPORTED_DISTRO_ID="ubuntu" \
+  TS_SUPPORTED_DISTRO_VERSION="24.04" \
+  TS_SUPPORTED_ARCH="amd64" \
+  TS_EXIT_OK=0 \
+  TS_EXIT_ERR=1 \
+  TS_EXIT_USAGE=2 \
+  TS_EXIT_PLATFORM=3 \
+  TS_EXIT_PRIVILEGE=4 \
+  TS_EXIT_NOT_IMPLEMENTED=5
 
-# Codigos de saida estaveis
-readonly TS_EXIT_OK=0
-readonly TS_EXIT_ERR=1
-readonly TS_EXIT_USAGE=2
-readonly TS_EXIT_PLATFORM=3
-readonly TS_EXIT_PRIVILEGE=4
-readonly TS_EXIT_NOT_IMPLEMENTED=5
+# Verifica se um caminho de teste (ou seu diretorio pai existente) resolve
+# efetivamente para dentro de /tmp sem atravessar symlinks que escapem de /tmp.
+# Importante: Esta funcao NAO e mecanismo de isolamento nem barreira de seguranca;
+# serve apenas para validar fixtures e mocks de teste em /tmp verificando o
+# caminho efetivo (readlink -f) e a ausencia de symlinks, nao apenas o prefixo textual.
+ts_is_effective_tmp_path() {
+  local raw_path="${1:-}"
+  if [[ -z "${raw_path}" ]] || [[ "${raw_path}" != /tmp/* ]] || [[ "${raw_path}" == *".."* ]]; then
+    return 1
+  fi
+  if [[ "${raw_path}" == *$'\n'* ]] || [[ "${raw_path}" == *$'\r'* ]]; then
+    return 1
+  fi
+
+  # Rejeitar se o proprio caminho (quando existente) for um symlink
+  if [[ -L "${raw_path}" ]]; then
+    return 1
+  fi
+
+  # Rejeitar se qualquer componente intermediario sob /tmp for um symlink
+  local rel="${raw_path#/tmp/}"
+  local cur="/tmp"
+  local seg
+  while [[ -n "${rel}" ]]; do
+    if [[ "${rel}" == *"/"* ]]; then
+      seg="${rel%%/*}"
+      rel="${rel#*/}"
+    else
+      seg="${rel}"
+      rel=""
+    fi
+    [[ -z "${seg}" ]] && continue
+    cur="${cur}/${seg}"
+    if [[ -L "${cur}" ]]; then
+      return 1
+    fi
+  done
+
+  # Resolver o caminho canonico do alvo existente (ou de seu diretorio pai) via readlink -f
+  local check_target="${raw_path}"
+  if [[ ! -e "${check_target}" ]]; then
+    check_target="${raw_path%/*}"
+  fi
+  if [[ -e "${check_target}" ]]; then
+    local resolved_tmp resolved_target
+    resolved_tmp="$(readlink -f -- "/tmp" 2>/dev/null || printf '/tmp')"
+    resolved_target="$(readlink -f -- "${check_target}" 2>/dev/null || true)"
+    if [[ -z "${resolved_target}" ]] \
+      || { [[ "${resolved_target}" != "${resolved_tmp}" ]] && [[ "${resolved_target}" != "${resolved_tmp}/"* ]]; }; then
+      return 1
+    fi
+  fi
+
+  return 0
+}
+
+# Limpa variaveis de hook de teste (TS_TEST_*) quando a execucao nao esta com
+# TS_TEST_SANDBOX_MODE=1 sobre caminhos efetivos em /tmp.
+# Nota de arquitetura: TS_TEST_SANDBOX_MODE e os hooks TS_TEST_* sao recursos
+# auxiliares da suite de testes (simulacao de plataforma e injecao de mocks),
+# NAO mecanismos de isolamento ou fronteira de seguranca. As verificacoes reais
+# de seguranca residem nas checagens de UID do kernel (EUID), propriedade de
+# arquivos (stat) e validacao canonica de destinos (ts_validate_managed_path).
+ts_sanitize_test_hooks() {
+  local allow_test_hooks="false"
+  if [[ "${TS_TEST_SANDBOX_MODE:-0}" == "1" ]]; then
+    local first_path_entry="${PATH%%:*}"
+    if ts_is_effective_tmp_path "${HOME:-}"; then
+      allow_test_hooks="true"
+    elif ts_is_effective_tmp_path "${TS_TEST_OS_RELEASE_FILE:-}"; then
+      allow_test_hooks="true"
+    elif ts_is_effective_tmp_path "${first_path_entry}"; then
+      allow_test_hooks="true"
+    fi
+  fi
+
+  if [[ "${allow_test_hooks}" != "true" ]]; then
+    unset TS_TEST_SANDBOX_MODE \
+      TS_TEST_EUID \
+      TS_TEST_ARCH \
+      TS_TEST_OS_RELEASE_FILE \
+      TS_TEST_TOOLS_LOCK_FILE \
+      TS_TEST_PLUGINS_LOCK_FILE \
+      TS_TEST_PLUGIN_REPO_BASE \
+      TS_TEST_SKIP_EXTERNAL_DOWNLOADS || true
+  fi
+}
+
+ts_sanitize_test_hooks
 
 # Inicializacao de cores respeitando NO_COLOR (https://no-color.org/) e TTY
+# shellcheck disable=SC2034 # TS_COLOR_BOLD e demais cores sao consumidas por lib/plan.sh, doctor.sh e uninstall-terminal.sh
 ts_init_colors() {
   if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]] || [[ ! -t 1 ]]; then
     TS_COLOR_RESET=""
@@ -178,4 +270,3 @@ ts_split_csv_strict() {
   done
   return 0
 }
-

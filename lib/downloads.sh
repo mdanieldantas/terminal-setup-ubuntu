@@ -120,16 +120,16 @@ ts_validate_tar_gz_archive() {
   local entry
   while IFS= read -r entry; do
     [[ -z "${entry}" ]] && continue
-    if [[ "${entry}" == /* ]] ||
-       [[ "${entry}" == ".." ]] ||
-       [[ "${entry}" == "../"* ]] ||
-       [[ "${entry}" == *"/../"* ]] ||
-       [[ "${entry}" == *"/.." ]] ||
-       ts_has_control_chars "${entry}"; then
+    if [[ "${entry}" == /* ]] \
+      || [[ "${entry}" == ".." ]] \
+      || [[ "${entry}" == "../"* ]] \
+      || [[ "${entry}" == *"/../"* ]] \
+      || [[ "${entry}" == *"/.." ]] \
+      || ts_has_control_chars "${entry}"; then
       ts_error "Entrada insegura detectada dentro do arquivo tar '${archive_file}': '${entry}'."
       return 1
     fi
-  done <<< "${listing}"
+  done <<<"${listing}"
 
   return 0
 }

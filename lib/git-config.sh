@@ -208,4 +208,3 @@ ts_apply_git_configuration() {
     "" \
     "${action}"
 }
-

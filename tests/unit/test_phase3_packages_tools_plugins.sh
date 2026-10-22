@@ -33,14 +33,16 @@
 
 set -Eeuo pipefail
 
-readonly TEST_REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)"
+TEST_REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." >/dev/null 2>&1 && pwd)"
+readonly TEST_REPO_ROOT
 readonly HELPER_SCRIPT="${TEST_REPO_ROOT}/scripts/install-system-packages.sh"
 readonly INSTALLER="${TEST_REPO_ROOT}/install-terminal.sh"
 readonly DOCTOR="${TEST_REPO_ROOT}/doctor.sh"
 readonly UNINSTALLER="${TEST_REPO_ROOT}/uninstall-terminal.sh"
 
 # Criar sandbox temporaria exclusiva em /tmp
-readonly TEST_SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/terminal-setup-phase3-tests.XXXXXX")"
+TEST_SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/terminal-setup-phase3-tests.XXXXXX")"
+readonly TEST_SANDBOX
 
 cleanup() {
   if [[ -n "${TEST_SANDBOX:-}" ]] && [[ -d "${TEST_SANDBOX}" ]]; then
@@ -68,7 +70,7 @@ fail() {
 
 # Prepara os-release simulado do Ubuntu 24.04 LTS
 readonly MOCK_UBUNTU_OS_RELEASE="${TEST_SANDBOX}/os-release-ubuntu-24.04"
-cat > "${MOCK_UBUNTU_OS_RELEASE}" << 'EOF'
+cat >"${MOCK_UBUNTU_OS_RELEASE}" <<'EOF'
 PRETTY_NAME="Ubuntu 24.04.2 LTS"
 NAME="Ubuntu"
 VERSION_ID="24.04"
@@ -79,13 +81,13 @@ ID_LIKE=debian
 EOF
 
 readonly MOCK_FEDORA_OS_RELEASE="${TEST_SANDBOX}/os-release-fedora"
-cat > "${MOCK_FEDORA_OS_RELEASE}" << 'EOF'
+cat >"${MOCK_FEDORA_OS_RELEASE}" <<'EOF'
 NAME="Fedora Linux"
 VERSION_ID="41"
 ID=fedora
 EOF
 
-# Cria ambiente de usuario isolado para cada subteste
+# Cria ambiente de usuario isolado para cada subteste (usando UID real do processo)
 setup_isolated_env() {
   local subname="$1"
   local base="${TEST_SANDBOX}/${subname}"
@@ -97,14 +99,15 @@ setup_isolated_env() {
   export GIT_CONFIG_GLOBAL="${base}/git/config"
   export GIT_CONFIG_NOSYSTEM=1
   unset ZDOTDIR || true
-  export TS_OS_RELEASE_FILE="${MOCK_UBUNTU_OS_RELEASE}"
+  export TS_TEST_SANDBOX_MODE="1"
+  export TS_TEST_OS_RELEASE_FILE="${MOCK_UBUNTU_OS_RELEASE}"
   export TS_TEST_ARCH="x86_64"
-  export TS_TEST_EUID="1000"
+  unset TS_TEST_EUID || true
   export TS_TEST_USER="ubuntu-tester"
   export NO_COLOR="1"
-  unset TS_SKIP_EXTERNAL_DOWNLOADS || true
-  unset TS_TOOLS_LOCK_FILE || true
-  unset TS_PLUGINS_LOCK_FILE || true
+  unset TS_TEST_SKIP_EXTERNAL_DOWNLOADS || true
+  unset TS_TEST_TOOLS_LOCK_FILE || true
+  unset TS_TEST_PLUGINS_LOCK_FILE || true
   unset TS_TEST_PLUGIN_REPO_BASE || true
 }
 
@@ -178,7 +181,7 @@ setup_isolated_env "helper_tests"
 # 3.1 --help funciona sem root
 TESTS_RUN=$((TESTS_RUN + 1))
 set +e
-out="$(TS_TEST_EUID=1000 bash "${HELPER_SCRIPT}" --help 2>&1)"
+out="$(bash "${HELPER_SCRIPT}" --help 2>&1)"
 rc=$?
 set -e
 if [[ "${rc}" -eq 0 ]] && [[ "${out}" == *"allowlist"* ]]; then
@@ -187,10 +190,10 @@ else
   fail "install-system-packages.sh --help falhou" "rc=${rc}"
 fi
 
-# 3.2 Recusa execucao sem root (UID 1000 -> codigo 4)
+# 3.2 Recusa execucao sem root (UID real != 0 -> codigo 4)
 TESTS_RUN=$((TESTS_RUN + 1))
 set +e
-out="$(TS_TEST_EUID=1000 bash "${HELPER_SCRIPT}" --profile minimal 2>&1)"
+out="$(bash "${HELPER_SCRIPT}" --profile minimal 2>&1)"
 rc=$?
 set -e
 if [[ "${rc}" -eq 4 ]] && [[ "${out}" == *"exige execucao como root"* ]]; then
@@ -202,11 +205,11 @@ fi
 # 3.3 Rejeita pacotes fora da allowlist e injecao de comandos (codigo 2)
 TESTS_RUN=$((TESTS_RUN + 1))
 set +e
-out1="$(TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --packages "zsh,htop" 2>&1)"
+TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --packages "zsh,htop" >/dev/null 2>&1
 rc1=$?
-out2="$(TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --packages "zsh;id" 2>&1)"
+TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --packages "zsh;id" >/dev/null 2>&1
 rc2=$?
-out3="$(TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --profile minimal --packages "zsh" 2>&1)"
+TS_TEST_EUID=0 bash "${HELPER_SCRIPT}" --profile minimal --packages "zsh" >/dev/null 2>&1
 rc3=$?
 set -e
 if [[ "${rc1}" -eq 2 ]] && [[ "${rc2}" -eq 2 ]] && [[ "${rc3}" -eq 2 ]]; then
@@ -218,7 +221,7 @@ fi
 # 3.4 Rejeita plataforma fora do Ubuntu 24.04 amd64 (codigo 3)
 TESTS_RUN=$((TESTS_RUN + 1))
 set +e
-out="$(TS_TEST_EUID=0 TS_OS_RELEASE_FILE="${MOCK_FEDORA_OS_RELEASE}" bash "${HELPER_SCRIPT}" --profile minimal 2>&1)"
+out="$(TS_TEST_SANDBOX_MODE=1 TS_TEST_EUID=0 TS_TEST_OS_RELEASE_FILE="${MOCK_FEDORA_OS_RELEASE}" bash "${HELPER_SCRIPT}" --profile minimal 2>&1)"
 rc=$?
 set -e
 if [[ "${rc}" -eq 3 ]]; then
@@ -231,7 +234,7 @@ fi
 readonly MOCK_APT_BIN="${TEST_SANDBOX}/helper_tests/bin"
 readonly APT_CALL_LOG="${TEST_SANDBOX}/helper_tests/apt-calls.log"
 
-cat > "${MOCK_APT_BIN}/dpkg-query" << 'EOF'
+cat >"${MOCK_APT_BIN}/dpkg-query" <<'EOF'
 #!/usr/bin/env bash
 pkg="${!#}"
 if [[ ",${MOCK_INSTALLED_PKGS:-}," == *",${pkg},"* ]]; then
@@ -242,7 +245,7 @@ exit 1
 EOF
 chmod +x "${MOCK_APT_BIN}/dpkg-query"
 
-cat > "${MOCK_APT_BIN}/apt-get" << EOF
+cat >"${MOCK_APT_BIN}/apt-get" <<EOF
 #!/usr/bin/env bash
 printf 'apt-get %s\n' "\$*" >> "${APT_CALL_LOG}"
 exit 0
@@ -297,14 +300,14 @@ setup_isolated_env "pkg_coord"
 readonly PKG_COORD_BIN="${TEST_SANDBOX}/pkg_coord/bin"
 
 # Mock dpkg-query que reporta pacotes ausentes
-cat > "${PKG_COORD_BIN}/dpkg-query" << 'EOF'
+cat >"${PKG_COORD_BIN}/dpkg-query" <<'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
 chmod +x "${PKG_COORD_BIN}/dpkg-query"
 
 # Mock sudo que falha em -n (simulando necessidade de senha)
-cat > "${PKG_COORD_BIN}/sudo" << 'EOF'
+cat >"${PKG_COORD_BIN}/sudo" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "-n" ]]; then
   exit 1
@@ -358,7 +361,7 @@ mkdir -p "${P3_ARTIFACTS_DIR}" "${P3_REPOS_DIR}"
 
 # 5.1 Criar artefatos .tar.gz sinteticos para starship e superfile (spf)
 mkdir -p "${P3_ARTIFACTS_DIR}/build_starship"
-cat > "${P3_ARTIFACTS_DIR}/build_starship/starship" << 'EOF'
+cat >"${P3_ARTIFACTS_DIR}/build_starship/starship" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
   printf 'starship 1.27.0\n'
@@ -372,10 +375,11 @@ exit 0
 EOF
 chmod 0755 "${P3_ARTIFACTS_DIR}/build_starship/starship"
 tar -czf "${P3_ARTIFACTS_DIR}/starship-x86_64-unknown-linux-musl.tar.gz" -C "${P3_ARTIFACTS_DIR}/build_starship" starship
-readonly STARSHIP_TAR_SHA="$(sha256sum "${P3_ARTIFACTS_DIR}/starship-x86_64-unknown-linux-musl.tar.gz" | awk '{print $1}')"
+STARSHIP_TAR_SHA="$(sha256sum "${P3_ARTIFACTS_DIR}/starship-x86_64-unknown-linux-musl.tar.gz" | awk '{print $1}')"
+readonly STARSHIP_TAR_SHA
 
 mkdir -p "${P3_ARTIFACTS_DIR}/build_spf/dist/superfile-linux-v1.6.0-amd64"
-cat > "${P3_ARTIFACTS_DIR}/build_spf/dist/superfile-linux-v1.6.0-amd64/spf" << 'EOF'
+cat >"${P3_ARTIFACTS_DIR}/build_spf/dist/superfile-linux-v1.6.0-amd64/spf" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "--version" ]]; then
   printf 'superfile version v1.6.0\n'
@@ -385,7 +389,8 @@ exit 0
 EOF
 chmod 0755 "${P3_ARTIFACTS_DIR}/build_spf/dist/superfile-linux-v1.6.0-amd64/spf"
 tar -czf "${P3_ARTIFACTS_DIR}/superfile-linux-v1.6.0-amd64.tar.gz" -C "${P3_ARTIFACTS_DIR}/build_spf" ./dist
-readonly SPF_TAR_SHA="$(sha256sum "${P3_ARTIFACTS_DIR}/superfile-linux-v1.6.0-amd64.tar.gz" | awk '{print $1}')"
+SPF_TAR_SHA="$(sha256sum "${P3_ARTIFACTS_DIR}/superfile-linux-v1.6.0-amd64.tar.gz" | awk '{print $1}')"
+readonly SPF_TAR_SHA
 
 # Gerar tools.lock.json de teste com os SHA-256 reais dos pacotes sinteticos
 readonly MOCK_TOOLS_LOCK="${P3_ARTIFACTS_DIR}/tools.lock.json"
@@ -393,10 +398,10 @@ jq \
   --arg st_sha "${STARSHIP_TAR_SHA}" \
   --arg spf_sha "${SPF_TAR_SHA}" \
   '.tools.starship.artifacts.amd64.sha256 = $st_sha | .tools.superfile.artifacts.amd64.sha256 = $spf_sha' \
-  "${TEST_REPO_ROOT}/versions/tools.lock.json" > "${MOCK_TOOLS_LOCK}"
+  "${TEST_REPO_ROOT}/versions/tools.lock.json" >"${MOCK_TOOLS_LOCK}"
 
 # Mock curl que copia o arquivo correspondente de P3_ARTIFACTS_DIR
-cat > "${P3_MOCK_BIN}/curl" << EOF
+cat >"${P3_MOCK_BIN}/curl" <<EOF
 #!/usr/bin/env bash
 dest=""
 url=""
@@ -434,20 +439,20 @@ EOF
 chmod +x "${P3_MOCK_BIN}/curl"
 
 # Criar binarios mockados de batcat e fdfind em P3_MOCK_BIN para testar links bat e fd
-cat > "${P3_MOCK_BIN}/batcat" << 'EOF'
+cat >"${P3_MOCK_BIN}/batcat" <<'EOF'
 #!/usr/bin/env bash
 printf 'bat 0.24.0\n'
 EOF
 chmod +x "${P3_MOCK_BIN}/batcat"
 
-cat > "${P3_MOCK_BIN}/fdfind" << 'EOF'
+cat >"${P3_MOCK_BIN}/fdfind" <<'EOF'
 #!/usr/bin/env bash
 printf 'fd 9.0.0\n'
 EOF
 chmod +x "${P3_MOCK_BIN}/fdfind"
 
 for mock_tool in fzf rg tmux zoxide eza btop nano; do
-  cat > "${P3_MOCK_BIN}/${mock_tool}" << EOF
+  cat >"${P3_MOCK_BIN}/${mock_tool}" <<EOF
 #!/usr/bin/env bash
 printf '%s mock 1.0.0\n' "${mock_tool}"
 EOF
@@ -465,17 +470,18 @@ create_mock_plugin_repo() {
     git init -q
     git config user.name "Test Author"
     git config user.email "test@example.com"
-    printf '# mock plugin %s\n' "${name}" > "${entry}"
+    printf '# mock plugin %s\n' "${name}" >"${entry}"
     git add "${entry}"
     git commit -q -m "Initial commit for ${name}"
     git rev-parse HEAD
   )
 }
 
-readonly COMMIT_ZVM="$(create_mock_plugin_repo "zsh-vi-mode" "zsh-vi-mode.plugin.zsh")"
-readonly COMMIT_ZAS="$(create_mock_plugin_repo "zsh-autosuggestions" "zsh-autosuggestions.zsh")"
-readonly COMMIT_ZSH="$(create_mock_plugin_repo "zsh-syntax-highlighting" "zsh-syntax-highlighting.zsh")"
-readonly COMMIT_ZHSS="$(create_mock_plugin_repo "zsh-history-substring-search" "zsh-history-substring-search.zsh")"
+COMMIT_ZVM="$(create_mock_plugin_repo "zsh-vi-mode" "zsh-vi-mode.plugin.zsh")"
+COMMIT_ZAS="$(create_mock_plugin_repo "zsh-autosuggestions" "zsh-autosuggestions.zsh")"
+COMMIT_ZSH="$(create_mock_plugin_repo "zsh-syntax-highlighting" "zsh-syntax-highlighting.zsh")"
+COMMIT_ZHSS="$(create_mock_plugin_repo "zsh-history-substring-search" "zsh-history-substring-search.zsh")"
+readonly COMMIT_ZVM COMMIT_ZAS COMMIT_ZSH COMMIT_ZHSS
 
 readonly MOCK_PLUGINS_LOCK="${P3_ARTIFACTS_DIR}/plugins.lock.json"
 jq \
@@ -487,23 +493,23 @@ jq \
    .plugins["zsh-autosuggestions"].commit = $c2 |
    .plugins["zsh-syntax-highlighting"].commit = $c3 |
    .plugins["zsh-history-substring-search"].commit = $c4' \
-  "${TEST_REPO_ROOT}/versions/plugins.lock.json" > "${MOCK_PLUGINS_LOCK}"
+  "${TEST_REPO_ROOT}/versions/plugins.lock.json" >"${MOCK_PLUGINS_LOCK}"
 
-export TS_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
-export TS_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
+export TS_TEST_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
+export TS_TEST_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
 export TS_TEST_PLUGIN_REPO_BASE="${P3_REPOS_DIR}"
 
 # 5.3 Testar execucao completa do perfil developer (--vi-mode)
 TESTS_RUN=$((TESTS_RUN + 1))
 if PATH="${P3_MOCK_BIN}:${PATH}" bash "${INSTALLER}" --profile developer --vi-mode --non-interactive --skip-system-packages >/dev/null; then
-  if [[ -x "${HOME}/.local/bin/starship" ]] &&
-     [[ -x "${HOME}/.local/bin/spf" ]] &&
-     [[ -L "${HOME}/.local/bin/bat" ]] &&
-     [[ -L "${HOME}/.local/bin/fd" ]] &&
-     [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] &&
-     [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] &&
-     [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]] &&
-     [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-vi-mode/zsh-vi-mode.plugin.zsh" ]]; then
+  if [[ -x "${HOME}/.local/bin/starship" ]] \
+    && [[ -x "${HOME}/.local/bin/spf" ]] \
+    && [[ -L "${HOME}/.local/bin/bat" ]] \
+    && [[ -L "${HOME}/.local/bin/fd" ]] \
+    && [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]] \
+    && [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ]] \
+    && [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-history-substring-search/zsh-history-substring-search.zsh" ]] \
+    && [[ -f "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-vi-mode/zsh-vi-mode.plugin.zsh" ]]; then
     pass "Instalacao completa (Starship, Superfile/spf, 4 plugins Git no commit fixado e links bat/fd)"
   else
     fail "Instalacao completa nao gerou todos os binarios, plugins ou links esperados"
@@ -545,11 +551,11 @@ fi
 # 5.6 Testar desinstalacao completa (reversao de ferramentas, plugins, links e dotfiles)
 TESTS_RUN=$((TESTS_RUN + 1))
 if PATH="${P3_MOCK_BIN}:${PATH}" bash "${UNINSTALLER}" --non-interactive >/dev/null; then
-  if [[ ! -e "${HOME}/.local/bin/starship" ]] &&
-     [[ ! -e "${HOME}/.local/bin/spf" ]] &&
-     [[ ! -e "${HOME}/.local/bin/bat" ]] &&
-     [[ ! -e "${HOME}/.local/bin/fd" ]] &&
-     [[ ! -e "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-autosuggestions" ]]; then
+  if [[ ! -e "${HOME}/.local/bin/starship" ]] \
+    && [[ ! -e "${HOME}/.local/bin/spf" ]] \
+    && [[ ! -e "${HOME}/.local/bin/bat" ]] \
+    && [[ ! -e "${HOME}/.local/bin/fd" ]] \
+    && [[ ! -e "${XDG_DATA_HOME}/terminal-setup/plugins/zsh-autosuggestions" ]]; then
     pass "uninstall-terminal.sh removeu binarios externos, links em ~/.local/bin e plugins Git criados"
   else
     fail "uninstall-terminal.sh deixou artefatos para tras"
@@ -565,11 +571,11 @@ printf '\n6. Casos de seguranca (checksum invalido, tar-slip, --only superfile, 
 
 # 6.1 Checksum SHA-256 incorreto aborta instalacao e limpa temporarios
 setup_isolated_env "bad_sha"
-export TS_TOOLS_LOCK_FILE="${TEST_SANDBOX}/bad_sha/bad-tools.lock.json"
-export TS_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
+export TS_TEST_TOOLS_LOCK_FILE="${TEST_SANDBOX}/bad_sha/bad-tools.lock.json"
+export TS_TEST_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
 export TS_TEST_PLUGIN_REPO_BASE="${P3_REPOS_DIR}"
 jq '.tools.superfile.artifacts.amd64.sha256 = "0000000000000000000000000000000000000000000000000000000000000000"' \
-  "${MOCK_TOOLS_LOCK}" > "${TS_TOOLS_LOCK_FILE}"
+  "${MOCK_TOOLS_LOCK}" >"${TS_TEST_TOOLS_LOCK_FILE}"
 
 TESTS_RUN=$((TESTS_RUN + 1))
 set +e
@@ -592,26 +598,27 @@ source "${TEST_REPO_ROOT}/lib/downloads.sh"
 TESTS_RUN=$((TESTS_RUN + 1))
 readonly MALICIOUS_TAR="${TEST_SANDBOX}/tar_slip/malicious.tar.gz"
 mkdir -p "${TEST_SANDBOX}/tar_slip/sub"
-printf 'evil\n' > "${TEST_SANDBOX}/tar_slip/evil.txt"
-tar -P -czf "${MALICIOUS_TAR}" -C "${TEST_SANDBOX}/tar_slip/sub" ../evil.txt 2>/dev/null || true
-if ! ts_validate_tar_gz_archive "${MALICIOUS_TAR}" 2>/dev/null; then
-  pass "ts_validate_tar_gz_archive rejeita pacote .tar.gz com path traversal ('../')"
+printf 'evil\n' >"${TEST_SANDBOX}/tar_slip/evil.txt"
+tar -P -czf "${MALICIOUS_TAR}" -C "${TEST_SANDBOX}/tar_slip/sub" ../evil.txt 2>/dev/null
+if tar -tzf "${MALICIOUS_TAR}" 2>/dev/null | grep -qxF "../evil.txt" \
+  && ! ts_validate_tar_gz_archive "${MALICIOUS_TAR}" 2>/dev/null; then
+  pass "ts_validate_tar_gz_archive rejeita pacote .tar.gz confirmado com path traversal ('../evil.txt')"
 else
-  fail "ts_validate_tar_gz_archive aceitou pacote .tar.gz com '../'"
+  fail "ts_validate_tar_gz_archive aceitou pacote .tar.gz com '../' ou fixture nao continha '../evil.txt'"
 fi
 
 # 6.3 --only superfile instala apenas superfile (spf), sem zshrc, sem starship e sem plugins
 setup_isolated_env "only_spf"
-export TS_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
-export TS_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
+export TS_TEST_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
+export TS_TEST_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
 export TS_TEST_PLUGIN_REPO_BASE="${P3_REPOS_DIR}"
 
 TESTS_RUN=$((TESTS_RUN + 1))
 if PATH="${P3_MOCK_BIN}:${PATH}" bash "${INSTALLER}" --only superfile --non-interactive --skip-system-packages >/dev/null; then
-  if [[ -x "${HOME}/.local/bin/spf" ]] &&
-     [[ ! -e "${HOME}/.local/bin/starship" ]] &&
-     [[ ! -e "${HOME}/.zshrc" ]] &&
-     [[ ! -d "${XDG_DATA_HOME}/terminal-setup/plugins" ]]; then
+  if [[ -x "${HOME}/.local/bin/spf" ]] \
+    && [[ ! -e "${HOME}/.local/bin/starship" ]] \
+    && [[ ! -e "${HOME}/.zshrc" ]] \
+    && [[ ! -d "${XDG_DATA_HOME}/terminal-setup/plugins" ]]; then
     pass "--only superfile instala exclusivamente Superfile (spf) sem Zsh, Starship ou plugins"
   else
     fail "--only superfile instalou componentes nao solicitados"
@@ -622,19 +629,19 @@ fi
 
 # 6.4 Links preexistentes em ~/.local/bin/bat e ~/.local/bin/fd sao preservados sem sobrescrever
 setup_isolated_env "existing_links"
-export TS_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
-export TS_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
+export TS_TEST_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
+export TS_TEST_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
 export TS_TEST_PLUGIN_REPO_BASE="${P3_REPOS_DIR}"
 
 mkdir -p "${HOME}/.local/bin"
-printf '#!/usr/bin/env bash\necho custom-bat\n' > "${HOME}/.local/bin/bat"
+printf '#!/usr/bin/env bash\necho custom-bat\n' >"${HOME}/.local/bin/bat"
 chmod +x "${HOME}/.local/bin/bat"
 ln -s "/custom/fd" "${HOME}/.local/bin/fd"
 
 TESTS_RUN=$((TESTS_RUN + 1))
 if PATH="${P3_MOCK_BIN}:${PATH}" bash "${INSTALLER}" --only bat,fd --non-interactive --skip-system-packages 2>/dev/null >/dev/null; then
-  if [[ -f "${HOME}/.local/bin/bat" ]] && [[ ! -L "${HOME}/.local/bin/bat" ]] &&
-     [[ -L "${HOME}/.local/bin/fd" ]] && [[ "$(readlink "${HOME}/.local/bin/fd")" == "/custom/fd" ]]; then
+  if [[ -f "${HOME}/.local/bin/bat" ]] && [[ ! -L "${HOME}/.local/bin/bat" ]] \
+    && [[ -L "${HOME}/.local/bin/fd" ]] && [[ "$(readlink "${HOME}/.local/bin/fd")" == "/custom/fd" ]]; then
     pass "Comandos ou symlinks preexistentes em ~/.local/bin/{bat,fd} jamais sao sobrescritos"
   else
     fail "Links preexistentes em ~/.local/bin foram alterados indevidamente"
@@ -645,8 +652,8 @@ fi
 
 # 6.5 --skip-git omite clonagem de plugins Zsh
 setup_isolated_env "skip_git_plugins"
-export TS_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
-export TS_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
+export TS_TEST_TOOLS_LOCK_FILE="${MOCK_TOOLS_LOCK}"
+export TS_TEST_PLUGINS_LOCK_FILE="${MOCK_PLUGINS_LOCK}"
 export TS_TEST_PLUGIN_REPO_BASE="${P3_REPOS_DIR}"
 
 TESTS_RUN=$((TESTS_RUN + 1))

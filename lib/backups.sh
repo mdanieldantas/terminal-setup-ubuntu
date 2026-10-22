@@ -38,6 +38,7 @@ ts_generate_install_id() {
 }
 
 # Inicializa os caminhos XDG em variaveis sem criar diretorios no disco
+# shellcheck disable=SC2034 # TS_DATA_ROOT e demais caminhos globais sao lidos por lib/tools.sh, lib/plugins.sh e doctor.sh
 ts_init_state_paths() {
   ts_validate_user_paths
   TS_CONFIG_ROOT="${TS_XDG_CONFIG_HOME}/${TS_PROJECT_NAME}"
@@ -59,7 +60,7 @@ ts_log_event() {
   fi
   local ts_now
   ts_now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  printf '%s [%s] %s\n' "${ts_now}" "${level}" "$*" >> "${TS_CURRENT_LOG_FILE}"
+  printf '%s [%s] %s\n' "${ts_now}" "${level}" "$*" >>"${TS_CURRENT_LOG_FILE}"
 }
 
 # Adquire lock de execucao concorrente (somente em execucao efetiva)
@@ -78,7 +79,7 @@ ts_acquire_execution_lock() {
     ts_die "${TS_EXIT_ERR}" \
       "Outra execucao do ${TS_PROJECT_NAME} parece estar ativa (lock em '${TS_LOCK_DIR}', PID '${lock_owner:-desconhecido}'). Se não houver processo ativo, remova '${TS_LOCK_DIR}' manualmente."
   fi
-  printf '%s\n' "$$" > "${TS_LOCK_DIR}/pid"
+  printf '%s\n' "$$" >"${TS_LOCK_DIR}/pid"
   TS_LOCK_ACQUIRED="true"
   umask "${old_umask}"
 }
@@ -93,6 +94,7 @@ ts_release_execution_lock() {
 }
 
 # Cria estrutura de estado XDG para uma execucao efetiva com umask 077
+# shellcheck disable=SC2034 # TS_CURRENT_MANIFEST_FILE e consumido por lib/manifest.sh e install-terminal.sh
 ts_prepare_effective_state() {
   ts_init_state_paths
   ts_acquire_execution_lock
@@ -110,7 +112,7 @@ ts_prepare_effective_state() {
   TS_CURRENT_LOG_FILE="${TS_LOGS_DIR}/${TS_INSTALL_ID}.log"
   TS_CURRENT_MANIFEST_FILE="${TS_MANIFESTS_DIR}/${TS_INSTALL_ID}.json"
 
-  : > "${TS_CURRENT_LOG_FILE}"
+  : >"${TS_CURRENT_LOG_FILE}"
   chmod 600 "${TS_CURRENT_LOG_FILE}" 2>/dev/null || true
 
   umask "${old_umask}"
@@ -174,12 +176,28 @@ ts_validate_managed_path() {
     return 1
   fi
 
-  # Impedir que qualquer diretorio pai intermediario entre matched_root e dirname(target_path)
-  # seja um symlink que escape para fora da arvore do usuario
+  # Rejeitar se a propria raiz selecionada (ex.: HOME, ZDOTDIR, XDG_CONFIG_HOME) for um symlink
+  if [[ -L "${matched_root}" ]]; then
+    return 1
+  fi
+
+  # Determinar ancestral base de verificacao de symlinks:
+  # - Se matched_root estiver sob HOME, verificar cada segmento a partir de HOME.
+  # - Se matched_root estiver sob /tmp, verificar cada segmento a partir de /tmp.
+  # - Caso contrario, verificar a partir de matched_root.
+  local walk_base="${matched_root}"
+  if [[ "${matched_root}" == "${HOME}/"* ]] && [[ ! -L "${HOME}" ]]; then
+    walk_base="${HOME%/}"
+  elif [[ "${matched_root}" == /tmp/* ]] && [[ ! -L "/tmp" ]]; then
+    walk_base="/tmp"
+  fi
+
+  # Impedir que qualquer diretorio intermediario entre walk_base e dirname(target_path)
+  # seja um symlink que escape para fora da arvore permitida do usuario
   local parent_dir="${target_path%/*}"
-  local rel_sub="${parent_dir#"${matched_root}"}"
+  local rel_sub="${parent_dir#"${walk_base}"}"
   rel_sub="${rel_sub#/}"
-  local cur_check="${matched_root}"
+  local cur_check="${walk_base}"
   local seg
   if [[ -n "${rel_sub}" ]]; then
     local remaining="${rel_sub}"
@@ -196,6 +214,20 @@ ts_validate_managed_path() {
         return 1
       fi
     done
+  fi
+
+  # Quando matched_root e parent_dir ja existirem no disco, confirmar via readlink -f
+  # que o caminho canonico do diretorio pai permanece dentro do caminho canonico da raiz
+  if [[ -e "${matched_root}" ]] && [[ -e "${parent_dir}" ]]; then
+    local canon_root canon_parent
+    canon_root="$(readlink -f -- "${matched_root}" 2>/dev/null || true)"
+    canon_parent="$(readlink -f -- "${parent_dir}" 2>/dev/null || true)"
+    if [[ -z "${canon_root}" ]] || [[ -z "${canon_parent}" ]]; then
+      return 1
+    fi
+    if [[ "${canon_parent}" != "${canon_root}" ]] && [[ "${canon_parent}" != "${canon_root}/"* ]]; then
+      return 1
+    fi
   fi
 
   return 0
@@ -446,6 +478,7 @@ ts_install_managed_symlink_if_safe() {
     ts_log_event "WARN" "Arquivo preexistente em ~/.local/bin preservado: path=${link_path}"
   fi
 
+  # shellcheck disable=SC2034 # TS_LAST_FILE_ACTION faz parte do contrato publico das funcoes ts_install_managed_*
   TS_LAST_FILE_ACTION="${action}"
 
   ts_manifest_record_entry \
@@ -459,4 +492,3 @@ ts_install_managed_symlink_if_safe() {
     "${installed_link}" \
     "${action}"
 }
-
