@@ -199,7 +199,9 @@ else
   fail "Encontrado /home/dev/.config/superfile/config.toml não autorizado"
 fi
 
-# Testar ts_validate_tar_gz_archive em ambiente Ubuntu 24.04 real (arquivo limpo vs tar-slip)
+# Testar ts_validate_tar_gz_archive em ambiente Ubuntu 24.04 real:
+#   3a. Caso positivo: estrutura ./dist/.../spf válida
+#   3b. Caso negativo: pacote contendo path traversal (../) deve ser rejeitado
 (
   # shellcheck source=lib/common.sh
   source "${REPO_ROOT}/lib/common.sh"
@@ -214,8 +216,28 @@ fi
   tar -czf "${TMP_TAR_TEST}/valid-spf.tar.gz" -C "${TMP_TAR_TEST}" "./dist/superfile-linux-v1.6.0-amd64/spf"
 
   ts_validate_tar_gz_archive "${TMP_TAR_TEST}/valid-spf.tar.gz"
-) && pass "ts_validate_tar_gz_archive aprova estrutura ./dist/.../spf no Ubuntu 24.04" \
+) && pass "ts_validate_tar_gz_archive (caso positivo) aprova estrutura ./dist/.../spf no Ubuntu 24.04" \
   || fail "ts_validate_tar_gz_archive falhou em arquivo tar.gz válido no Ubuntu 24.04"
+
+(
+  # shellcheck source=lib/common.sh
+  source "${REPO_ROOT}/lib/common.sh"
+  # shellcheck source=lib/downloads.sh
+  source "${REPO_ROOT}/lib/downloads.sh"
+
+  TMP_TAR_BAD="$(mktemp -d)"
+  trap 'rm -rf -- "${TMP_TAR_BAD}"' EXIT
+
+  mkdir -p "${TMP_TAR_BAD}/sub"
+  printf 'malicious\n' > "${TMP_TAR_BAD}/evil.txt"
+  tar -czf "${TMP_TAR_BAD}/traversal.tar.gz" -C "${TMP_TAR_BAD}/sub" "../evil.txt" 2>/dev/null
+
+  if ts_validate_tar_gz_archive "${TMP_TAR_BAD}/traversal.tar.gz" 2>/dev/null; then
+    exit 1
+  fi
+  exit 0
+) && pass "ts_validate_tar_gz_archive (caso negativo) rejeita arquivo tar.gz com path traversal ('../evil.txt')" \
+  || fail "ts_validate_tar_gz_archive não rejeitou arquivo tar.gz com path traversal"
 
 # ------------------------------------------------------------------------------
 # 4. Plugins Zsh instalados nos commits fixados em versions/plugins.lock.json
@@ -316,18 +338,26 @@ if [[ "${MISSING_USER_FILES}" -eq 0 ]]; then
   pass "Todos os 17 arquivos, módulos e binários esperados estão presentes em /home/dev"
 fi
 
-if [[ ! -e "/root/.zshrc" ]] && [[ ! -e "/root/.config/terminal-setup" ]] && [[ ! -e "/root/.local/state/terminal-setup" ]]; then
-  pass "Isolamento /root confirmado: nenhum dotfile ou estado do projeto foi gravado em /root"
+# Nota: como usuário não-root 'dev', /root possui permissão 0700 (inacessível a 'dev').
+# Não usamos '[[ ! -e /root/... ]]' como prova de ausência sob UID != 0; a verificação
+# efetiva dos caminhos dentro de /root é executada em inspeção separada como UID 0.
+if [[ ! -r "/root" ]] && [[ ! -x "/root" ]]; then
+  pass "Diretório /root é inacessível ao usuário não-root 'dev' (inspeção interna de /root delegada ao check separado como UID 0)"
 else
-  fail "Artefatos indevidos encontrados em /root"
+  fail "Diretório /root está legível/atravessável pelo usuário comum 'dev'"
 fi
 
 GIT_USER_NAME="$(git config --global --get user.name 2>/dev/null || true)"
 GIT_USER_EMAIL="$(git config --global --get user.email 2>/dev/null || true)"
-if [[ -z "${GIT_USER_NAME}" ]] && [[ -z "${GIT_USER_EMAIL}" ]] && [[ ! -e "/home/dev/.ssh/id_rsa" ]] && [[ ! -e "/home/dev/.ssh/id_ed25519" ]]; then
-  pass "Nenhuma identidade Git pessoal (user.name / user.email) ou chave SSH privada gravada na imagem"
+HAS_GIT_NAME="nao"
+HAS_GIT_EMAIL="nao"
+[[ -n "${GIT_USER_NAME}" ]] && HAS_GIT_NAME="sim"
+[[ -n "${GIT_USER_EMAIL}" ]] && HAS_GIT_EMAIL="sim"
+
+if [[ "${HAS_GIT_NAME}" == "nao" ]] && [[ "${HAS_GIT_EMAIL}" == "nao" ]] && [[ ! -e "/home/dev/.ssh/id_rsa" ]] && [[ ! -e "/home/dev/.ssh/id_ed25519" ]]; then
+  pass "Nenhuma identidade Git pessoal (user.name / user.email) ou chave SSH privada encontrada em /home/dev"
 else
-  fail "Identidade Git ou chave privada encontrada na imagem" "name='${GIT_USER_NAME}', email='${GIT_USER_EMAIL}'"
+  fail "Identidade Git ou chave privada encontrada na imagem (valores omitidos por privacidade)" "user.name_presente=${HAS_GIT_NAME}, user.email_presente=${HAS_GIT_EMAIL}"
 fi
 
 if [[ ! -e "/opt/terminal-setup/.git" ]] && [[ ! -e "/opt/terminal-setup/terminal.conf" ]] && [[ -f "/opt/terminal-setup/examples/terminal.conf.example" ]]; then
@@ -339,9 +369,16 @@ fi
 # ------------------------------------------------------------------------------
 # 8. Idempotência em segunda execução real no container
 # ------------------------------------------------------------------------------
-SHA_BEFORE_ZSHR="$(sha256sum /home/dev/.zshrc | awk '{print $1}')"
-SHA_BEFORE_OPTS="$(sha256sum /home/dev/.config/terminal-setup/zsh/options.zsh | awk '{print $1}')"
-SHA_BEFORE_STAR="$(sha256sum /home/dev/.config/starship.toml | awk '{print $1}')"
+SNAPSHOT_BEFORE="$(
+  for f in "${EXPECTED_USER_FILES[@]}"; do
+    stat -c '%n|%i|%Y' "${f}"
+    if [[ -f "${f}" ]] && [[ ! -L "${f}" ]]; then
+      sha256sum "${f}"
+    elif [[ -L "${f}" ]]; then
+      printf 'LINK:%s->%s\n' "${f}" "$(readlink "${f}")"
+    fi
+  done
+)"
 BACKUPS_BEFORE="$(find /home/dev/.local/state/terminal-setup/backups -type f 2>/dev/null | wc -l)"
 
 bash "${INSTALLER}" \
@@ -351,20 +388,25 @@ bash "${INSTALLER}" \
   --git-identity skip \
   --change-shell no </dev/null >/dev/null
 
-SHA_AFTER_ZSHR="$(sha256sum /home/dev/.zshrc | awk '{print $1}')"
-SHA_AFTER_OPTS="$(sha256sum /home/dev/.config/terminal-setup/zsh/options.zsh | awk '{print $1}')"
-SHA_AFTER_STAR="$(sha256sum /home/dev/.config/starship.toml | awk '{print $1}')"
+SNAPSHOT_AFTER="$(
+  for f in "${EXPECTED_USER_FILES[@]}"; do
+    stat -c '%n|%i|%Y' "${f}"
+    if [[ -f "${f}" ]] && [[ ! -L "${f}" ]]; then
+      sha256sum "${f}"
+    elif [[ -L "${f}" ]]; then
+      printf 'LINK:%s->%s\n' "${f}" "$(readlink "${f}")"
+    fi
+  done
+)"
 BACKUPS_AFTER="$(find /home/dev/.local/state/terminal-setup/backups -type f 2>/dev/null | wc -l)"
 LATEST_MANIFEST="$(ls -t /home/dev/.local/state/terminal-setup/manifests/*.json | head -n 1)"
 
-if [[ "${SHA_BEFORE_ZSHR}" == "${SHA_AFTER_ZSHR}" ]] &&
-   [[ "${SHA_BEFORE_OPTS}" == "${SHA_AFTER_OPTS}" ]] &&
-   [[ "${SHA_BEFORE_STAR}" == "${SHA_AFTER_STAR}" ]] &&
+if [[ "${SNAPSHOT_BEFORE}" == "${SNAPSHOT_AFTER}" ]] &&
    [[ "${BACKUPS_BEFORE}" -eq "${BACKUPS_AFTER}" ]] &&
    jq -e 'all(.entries[]; .action == "unchanged")' "${LATEST_MANIFEST}" >/dev/null; then
-  pass "Segunda execução real no container é 100% idempotente (todos os itens 'unchanged', zero backups extras)"
+  pass "Segunda execução no container preservou inodes, mtimes e SHA-256 dos 17 recursos verificados, sem criar backups extras e registrando action='unchanged' no manifesto"
 else
-  fail "Segunda execução no container produziu alterações desnecessárias"
+  fail "Segunda execução no container regravou arquivos ou produziu alterações desnecessárias"
 fi
 
 # ------------------------------------------------------------------------------

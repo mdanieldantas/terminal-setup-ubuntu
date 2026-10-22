@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ==============================================================================
 # docker/Dockerfile — Ambiente Ubuntu 24.04 LTS (amd64) do terminal-setup
 #
