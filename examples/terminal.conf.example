@@ -1,0 +1,69 @@
+# ==============================================================================
+# Exemplo de arquivo de preferencias para o terminal-setup
+# ==============================================================================
+# Como usar:
+#   1. Copie este arquivo para um caminho local (por exemplo, ./terminal.conf
+#      ou ~/.config/terminal-setup/terminal.conf).
+#   2. Execute o instalador indicando explicitamente o caminho com --config:
+#        bash ./install-terminal.sh --config ./terminal.conf --dry-run
+#
+# Regras importantes de formato e seguranca:
+#   - Nenhum arquivo pessoal e carregado implicitamente sem --config.
+#   - Este arquivo e lido por um parser restrito de pares CHAVE=valor (UTF-8),
+#     NUNCA por "source" do shell.
+#   - Nao ha expansao de variaveis ($HOME), substituicao de comandos ($(...)),
+#     aspas interpretadas pelo shell ou interpolacao.
+#   - Comentarios devem iniciar com '#' em linha propria.
+#   - Precedencia: valores padrao < arquivo --config < parametros de CLI.
+#   - AVISO DE SEGURANCA: nunca coloque senhas, tokens, chaves privadas ou
+#     segredos neste arquivo. O .gitignore evita commits acidentais de
+#     /terminal.conf, mas NAO apaga dados ja commitados no historico Git, e um
+#     arquivo em texto puro no disco nao e um cofre de segredos.
+# ==============================================================================
+
+# Perfil base: minimal | developer | server
+PROFILE=developer
+
+# Modo de icones visuais: plain | nerd
+# (Nerd Font deve ser configurada no terminal cliente, nao no servidor SSH)
+ICONS=plain
+
+# Modo Vi no Zsh (plugin opcional zsh-vi-mode): true | false
+VI_MODE=false
+
+# Componentes extras a incluir alem do perfil (separados por virgula)
+# Exemplo para servidor com Superfile e eza: INCLUDE=superfile,eza
+# INCLUDE=btop
+
+# Componentes opcionais/nao obrigatorios a excluir (separados por virgula)
+# EXCLUDE=superfile
+
+# Politica para identidade global do Git (user.name e user.email):
+#   ask       -> pergunta interativamente (em --non-interactive vira skip)
+#   skip      -> nao altera a identidade atual
+#   configure -> define user.name e user.email usando GIT_NAME e GIT_EMAIL
+GIT_IDENTITY=ask
+
+# Nome e e-mail do Git (permitidos SOMENTE quando GIT_IDENTITY=configure)
+# Nunca versione dados pessoais reais no repositorio.
+# GIT_NAME=Pessoa Desenvolvedora Exemplo
+# GIT_EMAIL=pessoa.exemplo@example.invalid
+
+# Politica para defaults globais do Git (init.defaultBranch, core.editor, etc.):
+#   ask   -> pergunta interativamente (em --non-interactive vira keep)
+#   keep  -> preserva a configuracao existente sem alterar
+#   apply -> aplica os defaults recomendados pelo projeto
+GIT_DEFAULTS=ask
+
+# Troca do shell de login padrao do usuario (chsh):
+#   ask -> pergunta interativamente (em --non-interactive vira no)
+#   no  -> nao altera o shell de login
+#   yes -> solicita troca para Zsh (proibido com --non-interactive)
+CHANGE_SHELL=ask
+
+# Politica quando um arquivo de configuracao do usuario ja existe e diverge:
+#   ask            -> pergunta interativamente (em --non-interactive vira keep)
+#   keep           -> preserva o arquivo existente sem sobrescrever
+#   backup-replace -> faz backup verificavel antes de substituir
+ON_CONFLICT=ask
+

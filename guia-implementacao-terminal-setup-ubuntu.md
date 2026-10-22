@@ -193,17 +193,23 @@ Os perfis são conjuntos de ferramentas, não níveis de segurança.
 
 | Componente | minimal | developer | server |
 |---|---|---|---|
-| Zsh, Git, Nano, CA certificates, curl | sim | sim | sim |
+| Zsh, Git, Nano, CA certificates, curl, jq | sim | sim | sim |
 | Starship em modo texto | sim | sim | sim |
 | fzf, ripgrep, bat | sim | sim | sim |
-| fd, jq, tmux, zoxide | não | sim | sim |
+| fd, tmux, zoxide | não | sim | sim |
 | eza | não | sim | opcional |
 | Superfile (`spf`) | não | sim | opcional |
 | btop | não | opcional | sim |
 | autosuggestions e history-substring-search | não | sim | sim |
-| syntax highlighting | não | sim | opcional |
+| zsh-syntax-highlighting | não | sim | opcional |
 | zsh-vi-mode | opcional | opcional | opcional |
 | lazygit, delta, restic, rclone | fora da v1 | futuro | futuro |
+
+Decisões consolidadas na revisão da Etapa 0 (2026-10-22):
+
+- **P1 (`eza` e `zoxide`):** utilizar os pacotes APT do Ubuntu 24.04 (`universe`). Manter `versions/tools.lock.json` destinado às ferramentas externas ausentes no APT (`starship` e `superfile`). Documentar as versões APT como versões observadas na distribuição, não como ambiente integralmente congelado.
+- **P2 (Plugins Zsh):** gerenciar todos os plugins (`zsh-autosuggestions`, `zsh-history-substring-search`, `zsh-syntax-highlighting` e o opcional `zsh-vi-mode`) via Git no diretório do usuário, com commits fixados em `versions/plugins.lock.json`, respeitando `--skip-git` e sem atualizar plugins ao abrir o shell. Adotar `zsh-syntax-highlighting` (e não `fast-syntax-highlighting`, nunca instalando ambos). `zsh-vi-mode` permanece opcional e desativado por padrão.
+- **P3 (`jq` na base):** incluir `jq` como dependência base em todos os perfis, inclusive `minimal`. Utilizar `jq` para leitura e geração de JSON (locks, manifestos e saída `--json`), sem implementar parser ou gerador JSON artesanal com `grep`, `sed` ou concatenação de strings. As operações `--help`, `--version`, validação inicial de argumentos e `--dry-run` devem funcionar sem depender da instalação prévia de `jq`; quando uma operação efetiva precisar de `jq` e ele estiver ausente, informar o requisito claramente.
 
 Dependências auxiliares de download/descompactação só devem entrar quando necessárias ao método escolhido. Não instalar wget, gpg, compiladores e unzip por inércia.
 

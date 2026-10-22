@@ -1,0 +1,15 @@
+# Normalizacao de fim de linha para evitar CRLF em repositorio compartilhado Windows/Linux
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.zsh text eol=lf
+*.bats text eol=lf
+*.conf text eol=lf
+*.example text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+Dockerfile text eol=lf
+

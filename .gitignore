@@ -1,0 +1,24 @@
+# Arquivo local de preferencias do usuario (manter apenas examples/terminal.conf.example versionado)
+/terminal.conf
+*.local.conf
+
+# Diretorios temporarios, logs acidentais ou artefatos de execucao local
+/logs/
+/backups/
+/manifests/
+/tmp/
+/.tmp/
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Segredos e credenciais que nunca devem ser versionados
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.env
+.env.*
+
